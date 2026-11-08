@@ -3,6 +3,7 @@ import {Activity, ArrowDownToLine, ArrowLeft, ArrowRight, BookOpen, Check, Chevr
 import Scene from './Scene';
 import {coverage, initialState, readReports, reportKey, transition, type Mission, type Mode, type Report} from './engine';
 import {clinicalSource} from './clinical';
+import {CatheterLogo} from './Portal';
 
 const missions={position:{title:'จัดตำแหน่งถุงปัสสาวะ',en:'Bag positioning',number:'01',icon:Layers3,description:'สำรวจอุปกรณ์และทดลองขยับถุงในฉาก 3 มิติ'},drain:{title:'เทปัสสาวะ',en:'Emptying the drainage bag',number:'02',icon:Droplets,description:'ทดลองภาชนะ วาล์ว และการไหลในสถานการณ์จำลอง'}};
 const modes:{id:Mode;title:string;label:string;icon:typeof Play}[]=[{id:'learn',title:'CathLearn',label:'ดูการสาธิต',icon:Play},{id:'practice',title:'CathPractice',label:'ฝึกพร้อมคำแนะนำ',icon:MousePointer2},{id:'challenge',title:'CathChallenge',label:'ทดลองแบบไม่มีคำใบ้',icon:Trophy}];
@@ -47,7 +48,7 @@ export default function App(){
  const download=()=>{const blob=new Blob([JSON.stringify({app:'CathSim 360',version:1,containsPersonalData:false,reports},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='cathsim-anonymous-report.json';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);};
  return <div className="app-shell">
   <aside className={`sidebar ${menu?'mobile-open':''}`}>
-   <a className="brand" href="#" onClick={e=>{e.preventDefault();setPage('sim');}}><span className="brand-mark"><Activity size={25}/></span><span>CathSim <b>360</b><small>CARE THROUGH EXPERIENCE</small></span></a>
+   <a className="brand" href="#" onClick={e=>{e.preventDefault();setPage('sim');}}><span className="brand-mark"><CatheterLogo/></span><span>CathSim <b>360</b><small>CARE THROUGH EXPERIENCE</small></span></a>
    <button className="mobile-close icon-btn" aria-label="ปิดเมนู" onClick={()=>setMenu(false)}><X/></button>
    <div className="sidebar-label">พื้นที่การเรียนรู้</div>
    <button className={`side-link ${page==='sim'?'active':''}`} onClick={()=>{setPage('sim');setMenu(false);}}><Home size={19}/>ห้องฝึกเสมือนจริง<span className="active-dot"/></button>
@@ -57,10 +58,9 @@ export default function App(){
    <div className="sidebar-bottom"><div className="mini-guide"><span>✦</span><strong>ทีละก้าว อย่างมั่นใจ</strong><p>พื้นที่ทดลอง เรียนรู้ และเตรียมพร้อมสำหรับการดูแลที่บ้าน</p></div><div className="privacy"><ShieldCheck size={16}/> ไม่เก็บข้อมูลระบุตัวผู้ป่วย</div><small className="version">CathSim 360 · Prototype v0.1</small></div>
   </aside>
   <div className="main-wrap">
-   <header className="topbar"><div><button className="icon-btn mobile-menu" aria-label="เปิดเมนู" onClick={()=>setMenu(true)}><Menu/></button><span className="breadcrumb">พื้นที่การเรียนรู้ <ChevronRight size={13}/> <b>{page==='sim'?'ห้องฝึกเสมือนจริง':'CathReport'}</b></span></div><div className="top-right"><span className="prototype"><i/> รุ่นทดลองระบบ</span><button className="icon-btn" aria-label="วิธีใช้งาน" onClick={()=>setHelp(true)}><CircleHelp size={20}/></button><span className="user-avatar">C</span></div></header>
+   <header className="topbar"><div><button className="icon-btn mobile-menu" aria-label="เปิดเมนู" onClick={()=>setMenu(true)}><Menu/></button><span className="breadcrumb">พื้นที่การเรียนรู้ <ChevronRight size={13}/> <b>{page==='sim'?'ห้องฝึกเสมือนจริง':'CathReport'}</b></span></div><div className="top-right"><span className="prototype">conceived, designed and Brought to Life by RN.Patipon Wiyo</span><button className="icon-btn" aria-label="วิธีใช้งาน" onClick={()=>setHelp(true)}><CircleHelp size={20}/></button><span className="user-avatar">C</span></div></header>
    <main>
     <div className="page-heading"><div><div className="eyebrow">{page==='sim'?'YOUR HOME, YOUR CONFIDENCE':'YOUR LEARNING JOURNEY'}</div><h1>{page==='sim'?'ฝึกดูแล เริ่มที่ความมั่นใจ':'บันทึกการทดลองของคุณ'}<span className="heading-dot">.</span></h1><p>{page==='sim'?'เรียนรู้ผ่านประสบการณ์ในบ้านจำลอง กับ CathGuide ผู้ช่วยของคุณ':'ทบทวนการใช้งาน เก็บเฉพาะผลการทดลองในอุปกรณ์นี้'}</p></div><div className="heading-tag"><span className="tiny-house"><Home size={18}/></span> Home care simulation</div></div>
-    <div className="source-banner"><ShieldCheck size={19}/><span><strong>รอเชื่อมคู่มือบทที่ 4</strong> · ยังไม่มีเนื้อหา เกณฑ์ผ่าน หรือคะแนนทางคลินิก การโต้ตอบด้านล่างใช้ทดสอบระบบเท่านั้น</span><button onClick={()=>setHelp(true)}>รายละเอียด <ChevronRight size={14}/></button></div>
     {page==='sim'?<>
      <div className="mode-tabs" role="tablist" aria-label="โหมดการเรียนรู้">{modes.map(m=><button role="tab" aria-selected={mode===m.id} key={m.id} className={mode===m.id?'chosen':''} onClick={()=>setMode(m.id)}><m.icon size={18}/><strong>{m.title}</strong><span>{m.label}</span></button>)}</div>
      <div className="workspace-grid"><section className="simulation-card">

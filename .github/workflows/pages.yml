@@ -30,6 +30,8 @@ jobs:
         run: pnpm test
       - name: Build production app
         run: pnpm build
+        env:
+          VITE_REPORT_API_URL: ${{ vars.REPORT_API_URL }}
       - name: Upload website
         uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5
         with:
