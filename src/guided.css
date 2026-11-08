@@ -3,3 +3,19 @@
 @media(max-width:600px){.welcome-stage{display:flex;flex-direction:column-reverse;padding:24px 22px 0;gap:0;border-radius:23px}.welcome-copy{padding:0}.welcome-copy h1{font-size:30px;margin:10px 0}.welcome-copy p{font-size:17px}.cath-portrait{width:210px;align-self:center;margin-top:16px}.welcome-copy button{width:100%;font-size:15px}.welcome-audio-state{font-size:11px}.learning-heading{margin-top:28px}.learning-heading h2{font-size:22px}.learning-heading p{font-size:15px}.guided-app .lesson-card{padding:23px}.guided-app .lesson-card strong{font-size:22px}.lesson-top{gap:9px;align-items:center;flex-wrap:wrap}.lesson-top button{font-size:12px;padding:8px 12px;min-height:40px}.lesson-top>span:first-of-type{font-size:16px}.lesson-top>span:last-child{font-size:12px}.guided-stage{height:380px}.demo-nurse,.demo-nurse img{width:108px}.demo-nurse span{font-size:8px}.spoken-step{padding:0 3px}.spoken-step h1{font-size:25px}.nurse-script{font-size:19px}.bag-position-control{left:115px;bottom:9px;right:9px;padding:9px;font-size:10px}.stage-tag{font-size:8px;padding:4px 7px}.hands-free{font-size:13px}.step-dots{gap:6px}.step-dots button{font-size:12px}.step-dots span{display:none}.guided-app .credit{font-size:10px;line-height:1.7}.guided-app .portal-nav button{font-size:13px;min-height:42px}.guided-app .stat-row>div{font-size:12px}.guided-app .portal-header svg{width:48px;height:48px}}
 @media(prefers-reduced-motion:reduce){.cath-portrait.speaking{animation:none}}
 .stage-key{position:absolute;top:58px;left:17px;right:17px;font-size:12px;color:#6e8f73;pointer-events:none}
+
+
+/* CathSim 360 visual refresh: interactive training elements */
+.portal-header svg{padding:0!important;background:transparent!important;border-radius:18px!important;filter:drop-shadow(0 6px 10px #103d5933)}
+.portal-header>a{font-weight:800;letter-spacing:-.8px}
+.portal-header em{background:linear-gradient(115deg,#1bbca8,#6174e8);background-clip:text;-webkit-background-clip:text;color:transparent!important}
+.guided-app .lesson-card{transition:transform .2s ease,box-shadow .2s ease,border-color .2s ease;border-radius:22px}
+.guided-app .lesson-card:hover{transform:translateY(-3px);box-shadow:0 16px 36px #153a3b18}
+.guided-app .done-button{background:linear-gradient(110deg,#137969,#159e91)!important;border:0!important;box-shadow:0 8px 24px #0e7a6633}
+.scene-actions{position:absolute;bottom:18px;right:14px;left:150px;z-index:3;display:flex;align-items:center;gap:9px;flex-wrap:wrap;background:#ffffffed;border:1px solid #c8e9e6;border-radius:14px;padding:10px}
+.scene-actions button{background:#166f70!important;color:#fff!important;border:0!important;border-radius:10px!important;min-height:40px!important;padding:7px 12px!important;font-size:13px!important}
+.scene-actions span{font-size:12px;line-height:1.5;color:#42736c}
+.cath-portrait:not(.speaking){animation:cath-breathe 4.5s ease-in-out infinite}
+.demo-nurse{animation:cath-breathe 3.5s ease-in-out infinite}
+@media(max-width:650px){.scene-actions{left:12px;right:12px;bottom:10px}.scene-actions span{font-size:10px}.stage-corner{font-size:10px;max-width:85%}}
+@media(prefers-reduced-motion:reduce){.cath-portrait,.demo-nurse,.guided-app .lesson-card{animation:none!important;transition:none!important}}
