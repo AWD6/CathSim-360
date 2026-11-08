@@ -14,3 +14,7 @@
 Attempts เป็นข้อมูลจาก client จึงเป็นคะแนนการเรียนรู้ที่ยังแก้ไขโดยผู้ใช้ได้ ไม่ใช้ยืนยันสมรรถนะทางคลินิก Observations ให้พยาบาลกรอกหลังสาธิตกลับจริง result = demonstrated / needs-practice, assessor_code ใช้รหัสเจ้าหน้าที่, confirmed_cauti ต้องใช้เกณฑ์วินิจฉัยที่หน่วยงานรับรอง ไม่วินิจฉัยจากกลิ่น/สีหรือตอบผิดในเว็บ
 
 สถิติที่ควรแยก: ครั้งแรกก่อนเรียน vs หลังเรียน vs ติดตาม, คะแนนรายข้อ, เวลาที่ใช้ (ไม่ใช่เกณฑ์ผ่าน), จำนวนครั้งฝึก, อัตราสาธิตจริงได้โดยไม่ช่วย, CAUTI ต่อ 1,000 catheter-days เมื่อมีตัวเศษ/ตัวส่วนที่เจ้าหน้าที่ตรวจครบ ขณะนี้ UI ยังไม่มีแบบบันทึกสาธิตจริงหรือ dashboard อัตราติดเชื้อ
+
+
+## v0.4 roles
+Only admin may call report or deleteHistory. patient and caregiver may call progress for their own session code. Create an admin using issueAccount(code, "admin", ["*"]) in the owner editor; never expose access keys in the public repository. StepEvents H/I store mode/actions. Deletion is scoped by allowed_codes; the UI requires a separate confirmation.

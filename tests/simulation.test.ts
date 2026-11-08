@@ -1,0 +1,3 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {bagStatus,drainTick} from '../src/simulation.ts';
+test('bag bottom clears floor and entire bag remains below bladder',()=>{assert.match(bagStatus(.3),/แตะพื้น/);assert.match(bagStatus(1.3),/สูงเกิน/);assert.equal(bagStatus(.9),'ถุงต่ำกว่ากระเพาะปัสสาวะ และไม่แตะพื้น');});
+test('draining requires an open valve and a positioned container; never goes negative',()=>{assert.equal(drainTick(.8,false,true,2),.8);assert.equal(drainTick(.8,true,false,2),.8);assert.ok(drainTick(.8,true,true,2)<.8);assert.equal(drainTick(.01,true,true,100),0);});

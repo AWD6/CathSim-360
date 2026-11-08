@@ -37,3 +37,10 @@
 เพิ่ม 10 หัวข้อ 36 ขั้นตอนพร้อมเสียงไทยผู้หญิง และภาพจำลองอุปกรณ์ ใช้ข้อมูลเพิ่มเติมจาก [NHS England catheter passport 2023](https://www.england.nhs.uk/wp-content/uploads/2023/11/Catheter-passport-v8-complete-patient-and-clinical-Nov-2023.pdf), [Queensland Health](https://www.health.qld.gov.au/clinical-practice/guidelines-procedures/clinical-pathways/residential-aged-care-clinical-pathways/all-pathways/urinary-catheter-insertion-or-change) และ [UKHSA 2026](https://www.gov.uk/government/publications/infection-prevention-and-control-ipc-in-adult-social-care-asc/essential-ipc-considerations-for-clinical-interventions-and-procedures-in-adult-social-care) สำหรับการยึดสาย การเปลี่ยนถุง และการเช็ดปลายก๊อก
 
 รายงาน StepEvents บันทึกผู้ใช้กดทำแล้ว (confirmed) กับดูผ่านอัตโนมัติ (auto) แยกกัน ไม่ใช้คะแนน Quiz และไม่ถือการเลื่อนหลังเสียงจบ 8 วินาทีเป็นการปฏิบัติจริงที่ยืนยันโดยเจ้าหน้าที่ การประเมินจากการสาธิตกลับยังบันทึกโดยเจ้าหน้าที่ใน Observations ได้ ข้อมูล Attempts รุ่นก่อนยังเก็บไว้แยก
+
+
+## v0.4 — Interactive mannequin demonstration
+
+The project owner explicitly supplied Maharaj Nakorn Chiang Mai Hospital wording, anterior-thigh tape placement and alcohol-soaked cotton for the outlet. This attribution records the owner's instruction; it is not independent verification of hospital endorsement. NUP 2023 also describes alcohol wiping of the drainage spout: https://www.nup.com.sg/docs/nuplibraries/brochures-document/caring-for-your-urinary-catheter-may-2023.pdf?sfvrsn=a8bd2b4e_1 . The general bladder-level principle is retained: waist is a visual landmark, not a substitute for bladder level.
+
+The simplified adult male/female pelvic trainers are educational models. Scene interactions, self-confirmations and automatic viewing remain distinct facts; no clinical competence score is inferred. Reports require the admin role on the server.

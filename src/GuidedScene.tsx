@@ -1,61 +1,1892 @@
-import {Suspense,useEffect,useRef,useState} from 'react';
-import {Canvas,useFrame} from '@react-three/fiber';
-import {ContactShadows,Line,OrbitControls,RoundedBox} from '@react-three/drei';
+import { Suspense, useEffect, useRef, useState, useImperativeHandle, forwardRef } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { ContactShadows, Line, OrbitControls, RoundedBox } from '@react-three/drei';
 import * as THREE from 'three';
-import type {SceneKind} from './guided';
-type Props={topic:SceneKind;visual:number;paused:boolean};
-function Block({p,s,c}:{p:[number,number,number];s:[number,number,number];c:string}){return <RoundedBox args={s} position={p} radius={Math.min(...s)/5} smoothness={3} castShadow><meshStandardMaterial color={c} roughness={.7}/></RoundedBox>}
-function Hand({position=[0,0,0],rotation=0}:{position?:[number,number,number];rotation?:number}){return <group position={position} rotation={[0,0,rotation]}><Block p={[0,0,0]} s={[.3,.35,.14]} c="#b9dbeb"/>{[-.11,-.035,.04,.115].map((x,i)=><Block key={x} p={[x,.27-i*.012,0]} s={[.065,.32,.1]} c="#b9dbeb"/>)}<Block p={[.21,0,0]} s={[.13,.22,.12]} c="#b9dbeb"/><Block p={[0,-.27,0]} s={[.22,.3,.13]} c="#ffffff"/></group>}
-function Bag({height=1,fill=.45,color='#75b8aa'}:{height?:number;fill?:number;color?:string}){return <group position={[1.05,height,.5]}><RoundedBox args={[.58,.68,.13]} radius={.07}><meshPhysicalMaterial color="#e3f3ed" transparent opacity={.65} roughness={.2}/></RoundedBox><Block p={[0,-.28+fill*.27,0]} s={[.48,Math.max(.02,fill*.53),.07]} c="#e5c15e"/><Block p={[0,.33,0]} s={[.64,.06,.16]} c={color}/><Block p={[0,-.42,0]} s={[.065,.19,.07]} c="#dfc589"/><Block p={[.04,-.5,0]} s={[.2,.06,.1]} c={color}/>{[0,1,2].map(i=><Block key={i} p={[.12,-.18+i*.14,.08]} s={[.13,.01,.01]} c="#668f83"/>)}</group>}
-function PatientMannequin({standing=false}:{standing?:boolean}){return <group position={standing?[-.95,0,-.25]:[-.95,.85,-.25]} rotation={standing?[0,0,0]:[-Math.PI/2,0,0]}>
- <mesh position={[0,1.76,0]} castShadow><sphereGeometry args={[.22,24,16]}/><meshStandardMaterial color="#deb99e" roughness={.82}/></mesh>
- <mesh position={[0,1.18,0]} castShadow><capsuleGeometry args={[.35,.62,6,16]}/><meshStandardMaterial color="#e7f1ee" roughness={.9}/></mesh>
- {[-1,1].map(side=><group key={side}><mesh position={[side*.48,1.26,0]} rotation={[0,0,side*.15]} castShadow><capsuleGeometry args={[.095,.69,5,12]}/><meshStandardMaterial color="#dfb99f"/></mesh><mesh position={[side*.19,.42,0]} castShadow><capsuleGeometry args={[.14,.65,5,12]}/><meshStandardMaterial color="#d2e4dd"/></mesh></group>)}
- <mesh position={[0,.88,.02]} castShadow><sphereGeometry args={[.30,.23,.19,20,14]}/><meshStandardMaterial color="#d2e4dd"/></mesh>
- </group>}
+import type { SceneKind, LearningMode } from './guided';
+import { bagStatus, drainTick } from './simulation';
 
-// Educational external-anatomy mannequin, neutral clinical material. Not a substitute for supervised technique.
-function PelvicTrainer({sex,active}:{sex:'female'|'male';active:boolean}){
- const cloth='#dce8e5',skin='#e1bca5',clinical='#b96e7e';
- return <group position={[0,.05,0]}>
-  <Block p={[0,1.02,-.06]} s={[1.35,.44,.80]} c={cloth}/>
-  {[-1,1].map(side=><group key={side}><mesh position={[side*.45,.61,0]} castShadow><capsuleGeometry args={[.22,.72,8,24]}/><meshStandardMaterial color={skin} roughness={.88}/></mesh><mesh position={[side*.46,.13,.05]}><sphereGeometry args={[.22,20,16]}/><meshStandardMaterial color={skin}/></mesh></group>)}
-  <mesh position={[0,.97,.38]}><sphereGeometry args={[.37,.32,.14,28,16]}/><meshStandardMaterial color={skin}/></mesh>
-  {sex==='female'?<group>
-    <mesh position={[0,.92,.53]} scale={[.40,1.3,1]}><sphereGeometry args={[.19,.17,.06,24,16]}/><meshStandardMaterial color={clinical}/></mesh>
-    <mesh position={[0,1.01,.59]}><sphereGeometry args={[.055,.06,.025,20,16]}/><meshStandardMaterial color="#884d5b"/></mesh>
-    <mesh position={[0,.84,.596]}><sphereGeometry args={[.058,.09,.025,20,16]}/><meshStandardMaterial color="#c78e93"/></mesh>
-  </group>:<group>
-    <mesh position={[0,.81,.62]} rotation={[Math.PI/2,0,0]}><cylinderGeometry args={[.105,.125,.43,28]}/><meshStandardMaterial color={skin}/></mesh>
-    <mesh position={[0,.77,.86]}><sphereGeometry args={[.115,.13,.115,28,16]}/><meshStandardMaterial color={skin}/></mesh>
-    <mesh position={[0,.77,.97]}><sphereGeometry args={[.031,.026,.012,20,12]}/><meshStandardMaterial color="#98656d"/></mesh>
-    <mesh position={[0,.64,.53]} scale={[1.3,.7,1]}><sphereGeometry args={[.18,.15,.15,24,16]}/><meshStandardMaterial color={skin}/></mesh>
-  </group>}
-  <Line points={sex==='female'?[[0,1.01,.61],[.08,1.14,.70],[.40,1.45,.52]]:[[0,.77,1],[.08,.99,.95],[.40,1.45,.52]]} color="#e5d39a" lineWidth={5}/>
-  <mesh position={[active?0:.26,active?.90:1.3,.78]}><sphereGeometry args={[.075,20,16]}/><meshStandardMaterial color={active?'#36baa8':'#fff'}/></mesh>
-  {active&&<mesh position={[0,.97,.73]}><torusGeometry args={[.21,.012,8,64]}/><meshBasicMaterial color="#22b9ab"/></mesh>}
- </group>;
+type V = [number, number, number];
+type Props = {
+  topic: SceneKind;
+  visual: number;
+  paused: boolean;
+  speaking?: boolean;
+  mode?: LearningMode;
+  onAction?: (action: string) => void;
+};
+
+const skinTone = '#eac7b2';
+const siliconeMannequin = '#e5beab';
+const tapeColor = '#ffffff';
+
+function Block({
+  p,
+  s,
+  c,
+  onClick,
+  opacity = 1,
+  transparent = false
+}: {
+  p: V;
+  s: V;
+  c: string;
+  onClick?: () => void;
+  opacity?: number;
+  transparent?: boolean;
+}) {
+  return (
+    <RoundedBox
+      args={s}
+      position={p}
+      radius={Math.min(...s) / 4}
+      smoothness={3}
+      castShadow
+      onPointerDown={
+        onClick
+          ? (e) => {
+              e.stopPropagation();
+            }
+          : undefined
+      }
+      onClick={
+        onClick
+          ? (e) => {
+              e.stopPropagation();
+              onClick();
+            }
+          : undefined
+      }
+    >
+      <meshStandardMaterial color={c} roughness={0.55} opacity={opacity} transparent={transparent} />
+    </RoundedBox>
+  );
 }
-function Stage({topic,visual,paused,height,onHeight,drag,setDrag,sex,anatomyActive}:{topic:SceneKind;visual:number;paused:boolean;height:number;onHeight:(n:number)=>void;drag:boolean;setDrag:(n:boolean)=>void;sex:'female'|'male';anatomyActive:boolean}){
- const moving=useRef<THREE.Group>(null),flow=useRef<THREE.Mesh>(null),phase=useRef(0);
- const drain=topic==='drain',body=['position','tube','secure','hygiene','trouble'].includes(topic);
- useFrame((_,dt)=>{if(!paused)phase.current+=dt;const t=phase.current;if(moving.current){moving.current.position.x=Math.sin(t*1.3)*.16;moving.current.position.y=Math.sin(t*2)*.045;if(topic==='hygiene'){const sweep=(t*.22)%1;moving.current.position.z=sweep*.7-.2;moving.current.visible=sweep<.9;}}if(flow.current)flow.current.scale.x=1+Math.sin(t*12)*.1;});
- const h=topic==='position'?height:1.1;
- const points=(topic==='tube'||topic==='trouble')&&visual===0?[[.1,1.65,0],[.6,1.3,.3],[.95,1.25,.4],[.63,1.25,.4],[1.05,h+.35,.5]]:[[.1,1.65,0],[.55,1.48,.3],[.7,1.2,.45],[1.05,h+.35,.5]];
- return <><color attach="background" args={['#edf4ee']}/><ambientLight intensity={1.5}/><directionalLight castShadow position={[2,6,4]} intensity={2}/><hemisphereLight intensity={1} args={['#fff9e9','#bfd7cd',1]}/><Block p={[0,-.12,0]} s={[5,.2,3.5]} c="#f7f5eb"/>
- {body&&topic!=='hygiene'&&<><PatientMannequin standing={topic==='position'||topic==='secure'}/>{topic!=='position'&&topic!=='secure'&&<Block p={[-.7,.83,-.25]} s={[1.8,.22,2.5]} c="#b7cbbd"/>}{topic!=='position'&&topic!=='secure'&&<Block p={[-.7,1.02,-.25]} s={[1.7,.25,2.4]} c="#ffffff"/>}<Line points={points as [number,number,number][]} color="#d7b864" lineWidth={6}/></>}
- {topic==='position'&&<><group onPointerDown={e=>{e.stopPropagation();setDrag(true);(e.target as unknown as {setPointerCapture:(id:number)=>void}).setPointerCapture(e.pointerId);}} onPointerUp={e=>{setDrag(false);(e.target as unknown as {releasePointerCapture:(id:number)=>void}).releasePointerCapture(e.pointerId);}} onPointerMove={e=>{if(!drag)return;const p=new THREE.Vector3();e.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0,0,1),-.5),p);onHeight(Math.min(2.3,Math.max(.22,p.y)));}}><Bag height={h}/></group><Line points={[[-1.55,1.65,.55],[1.7,1.65,.55]]} color="#7996a0" dashed dashSize={.08} gapSize={.04} lineWidth={1}/></>}
- {(topic==='tube'||topic==='trouble')&&<><Bag/><group ref={moving}><Hand position={[.65,1.6,.7]} rotation={-.6}/></group></>}
- {topic==='secure'&&<><Line points={[[.1,1.65,0],[-.2,1.48,.3],[.05,1.46,.6],[.6,1.1,.5],[1.05,1.45,.5]]} color="#d7b864" lineWidth={6}/><Block p={[-.15,1.51,.4]} s={[.5,.04,.32]} c={visual>0?'#ffffff':'#cbe0da'}/><group ref={moving}><Hand position={[-.1,1.8,.7]} rotation={-.8}/></group><Bag/></>}
- {drain&&<><Bag height={1.5} fill={visual<2?.8:visual===2?.4:.05}/><Line points={[[.25,2.1,0],[.55,1.9,.2],[1.05,1.85,.5]]} color="#d7b864" lineWidth={6}/><mesh position={[1.05,.32,.5]}><cylinderGeometry args={[.34,.28,.45,32,1,true]}/><meshStandardMaterial color="#a4c9d3" side={THREE.DoubleSide}/></mesh><Block p={[1.05,.12,.5]} s={[.5,.03,.5]} c="#e1c67c"/>{visual===2&&<mesh ref={flow} position={[1.05,.77,.5]}><cylinderGeometry args={[.013,.013,.45,12]}/><meshStandardMaterial color="#d8ba60"/></mesh>}{visual===3&&<group ref={moving}><Hand position={[.8,1.18,.8]} rotation={-.7}/><Block p={[1.1,1.05,.57]} s={[.18,.13,.04]} c="#ffffff"/></group>}</>}
- {topic==='change'&&<><group position={[-1.6,0,0]}><Bag height={1.25} color="#b0b9b5" fill={.08}/></group><group position={[visual<3?.65:0,0,0]}><Bag height={1.25} fill={.02}/></group><Block p={[-.3,1.9,.3]} s={[.7,.1,.1]} c="#ddc48a"/><Block p={[visual===2?.3:.08,1.9,.3]} s={[.22,.13,.13]} c="#8ac7b6"/><Line points={[[.1,1.9,.3],[.5,1.85,.3],[visual<3?1.7:1.05,1.6,.5]]} color="#dfc88f" lineWidth={5}/><group ref={moving}><Hand position={[-.5,2.05,.55]} rotation={-1}/></group></>}
- {topic==='hands'&&<><group ref={moving}><Hand position={[-.2,1.1,.3]} rotation={-.65}/><Hand position={[.1,1.1,.45]} rotation={.65}/></group>{Array.from({length:8},(_,i)=><mesh key={i} position={[-.45+Math.sin(i)*.4,1.5+Math.cos(i)*.25,.55]}><sphereGeometry args={[.045,12,12]}/><meshStandardMaterial color="#e9f8ff" transparent opacity={.8}/></mesh>)}<Block p={[1.2,.35,-.3]} s={[.4,.6,.3]} c="#86bfae"/></>}
- {topic==='hygiene'&&<><PelvicTrainer sex={sex} active={anatomyActive}/>{visual>0&&<group ref={moving}><Hand position={[.39,1.45,.72]} rotation={-.7}/><Block p={[.12,1.05,.79]} s={[.21,.05,.17]} c="#ffffff"/></group>}</>}
- {topic==='water'&&<><mesh position={[-.5,.6,0]}><cylinderGeometry args={[.28,.22,1,32,1,true]}/><meshPhysicalMaterial color="#d8f3fa" transparent opacity={.45} side={THREE.DoubleSide}/></mesh><mesh position={[-.5,.48,0]}><cylinderGeometry args={[.24,.2,.65,32]}/><meshStandardMaterial color="#8fc6df" transparent opacity={.7}/></mesh><Bag height={1.2} fill={.6}/></>}
- {topic==='followup'&&<><Block p={[0,1,0]} s={[1.6,1.4,.15]} c="#ffffff"/><Block p={[0,1.6,.1]} s={[1.6,.3,.08]} c="#73ac9b"/>{Array.from({length:6},(_,i)=><Block key={i} p={[-.45+(i%3)*.45,1.2-Math.floor(i/3)*.4,.12]} s={[.22,.2,.06]} c={i===4?'#e6bb6a':'#dfeadf'}/>)}</>}
- <ContactShadows position={[0,.005,0]} scale={8} opacity={.25} blur={2} far={4}/></>;
+
+function Ball({
+  p,
+  s = [1, 1, 1],
+  c,
+  onClick,
+  opacity = 1,
+  transparent = false
+}: {
+  p: V;
+  s?: V;
+  c: string;
+  onClick?: () => void;
+  opacity?: number;
+  transparent?: boolean;
+}) {
+  return (
+    <mesh
+      position={p}
+      scale={s}
+      castShadow
+      onPointerDown={
+        onClick
+          ? (e) => {
+              e.stopPropagation();
+            }
+          : undefined
+      }
+      onClick={
+        onClick
+          ? (e) => {
+              e.stopPropagation();
+              onClick();
+            }
+          : undefined
+      }
+    >
+      <sphereGeometry args={[1, 32, 24]} />
+      <meshStandardMaterial color={c} roughness={0.5} opacity={opacity} transparent={transparent} />
+    </mesh>
+  );
 }
-export default function GuidedScene({topic,visual,paused}:Props){const [drag,setDrag]=useState(false),[height,setHeight]=useState<number|null>(null),[action,setAction]=useState(false),[sex,setSex]=useState<'female'|'male'>('female');useEffect(()=>{setHeight(null);setDrag(false);setAction(false);},[topic,visual]);const shown=height??(visual===0?2.05:visual===2?.23:.95);return <div className="guided-stage"><Suspense fallback={<div className="stage-loading">กำลังเตรียมภาพสาธิต…</div>}><Canvas fallback={<div className="stage-loading">อุปกรณ์นี้ไม่แสดงภาพ 3D คุณยังฟังเสียงและอ่านขั้นตอนด้านข้างได้ค่ะ</div>} shadows dpr={[1,1.5]} camera={{position:topic==='hygiene'?[2.8,2.5,3.7]:[3.7,2.8,6.4],fov:topic==='hygiene'?38:46}}><Stage topic={topic} visual={topic==='drain'&&action?2:visual} paused={paused} height={shown} onHeight={setHeight} drag={drag} setDrag={setDrag} sex={sex} anatomyActive={action}/><OrbitControls enabled={!drag} target={topic==='hygiene'?[0,1,.3]:[-.3,1,0]} minDistance={topic==='hygiene'?2:3.8} maxDistance={10} enablePan={!drag} minPolarAngle={.25} maxPolarAngle={1.65}/></Canvas></Suspense><span className="stage-corner">ภาพสาธิต 3D · ลากหมุน · คลิกขวา/สองนิ้วเพื่อเลื่อนมุมมอง · ซูมได้</span><span className="stage-key">{topic==='position'?'เส้นประ = ระดับกระเพาะปัสสาวะ':topic==='hygiene'?'หุ่นฝึกทำความสะอาด · เลือกหญิงหรือชาย':topic==='change'?'ไม่สัมผัสหัวต่อที่ต้องสะอาด':topic==='secure'?'ยึดสายภายนอก ให้มีระยะเผื่อ':topic==='drain'?'ปลายก๊อกไม่แตะภาชนะ':'ดูภาพ แล้วทำกับอุปกรณ์ของคุณ'}</span>{topic==='hygiene'&&<div className="scene-actions"><button type="button" aria-pressed={sex==='female'} onClick={()=>{setSex('female');setAction(false);}}>หุ่นหญิง</button><button type="button" aria-pressed={sex==='male'} onClick={()=>{setSex('male');setAction(false);}}>หุ่นชาย</button><button type="button" onClick={()=>setAction(v=>!v)}>{action?'✓ แสดงจุดทำความสะอาด':'◎ ชี้ตำแหน่งทำความสะอาด'}</button><span>หุ่นจำลองเพื่อการศึกษา · ต้องให้ทีมรักษาตรวจรับก่อนใช้สอนจริง</span></div>}
- {topic==='drain'&&<div className="scene-actions"><button type="button" onClick={()=>setAction(v=>!v)}>{action?'■ ปิดก๊อกจำลอง':'▶ เปิดก๊อกจำลอง'}</button><span>{action?'กำลังจำลองการไหล — ปิดก๊อกก่อนจบขั้น':'ทดลองเปิดและปิดก๊อกในแบบจำลองได้'}</span></div>}
- {topic==='secure'&&<div className="scene-actions"><button type="button" onClick={()=>setAction(v=>!v)}>{action?'✓ ติดเทปจำลองแล้ว':'◉ ทดลองติดเทปบนหน้าขา'}</button><span>{action?'ตรวจว่ามีระยะเผื่อ ไม่ตึงรั้ง':'เลือกจุดติดเทปบนหน้าขาตามที่พยาบาลสอน'}</span></div>}
- {topic==='position'&&<div className="bag-position-control"><label>ลองลากถุงในภาพ หรือเลื่อนระดับ<input aria-label="ลองปรับระดับถุงในภาพ" type="range" min=".22" max="2.3" step=".02" value={shown} onChange={e=>setHeight(Number(e.target.value))}/></label><strong>{shown>1.3?'สูงเกินไป: ย้ายลงให้ต่ำกว่ากระเพาะปัสสาวะ':shown<.38?'ต่ำจนแตะพื้น: ยกขึ้นจากพื้น':'ต่ำกว่ากระเพาะปัสสาวะ และไม่แตะพื้น'}</strong><button onClick={()=>setHeight(null)}>กลับภาพสาธิต</button></div>}</div>}
+
+function ArticulatedHand({
+  p,
+  r = [0, 0, 0],
+  scale = 1,
+  isLeft = false
+}: {
+  p: V;
+  r?: V;
+  scale?: number;
+  isLeft?: boolean;
+}) {
+  const thumbX = isLeft ? -0.16 : 0.16;
+  return (
+    <group position={p} rotation={r} scale={scale}>
+      <Block p={[0, 0, 0]} s={[0.26, 0.32, 0.09]} c={skinTone} />
+      {[-0.09, -0.03, 0.03, 0.09].map((fx, i) => (
+        <Block key={fx} p={[fx, 0.24 - Math.abs(i - 1.5) * 0.02, 0]} s={[0.05, 0.22, 0.075]} c={skinTone} />
+      ))}
+      <Block p={[thumbX, 0.04, 0.02]} s={[0.11, 0.17, 0.08]} c={skinTone} />
+      <Block p={[0, -0.24, 0]} s={[0.2, 0.2, 0.1]} c={skinTone} />
+    </group>
+  );
+}
+
+function Room() {
+  return (
+    <group>
+      <Block p={[0, -0.12, 0]} s={[7.5, 0.2, 5.5]} c="#e6dfd5" />
+      <Block p={[0, 2.0, -2.1]} s={[7.5, 4.2, 0.12]} c="#dceee7" />
+      <Block p={[-3.6, 2.0, 0]} s={[0.12, 4.2, 5.2]} c="#e7f1eb" />
+      <Block p={[-1.9, 2.4, -2.0]} s={[1.9, 1.6, 0.08]} c="#ffffff" />
+      <Block p={[-1.9, 2.4, -1.94]} s={[1.7, 1.4, 0.04]} c="#bae6fd" />
+      <Block p={[-1.9, 2.4, -1.9]} s={[0.05, 1.4, 0.02]} c="#ffffff" />
+      <Block p={[-1.9, 2.4, -1.9]} s={[1.7, 0.05, 0.02]} c="#ffffff" />
+      <Block p={[2.0, 0.45, -1.2]} s={[0.8, 0.9, 0.7]} c="#bccdc2" />
+      <Block p={[2.0, 0.92, -1.2]} s={[0.9, 0.06, 0.8]} c="#ffffff" />
+      <Block p={[2.0, 1.25, -1.2]} s={[0.05, 0.6, 0.05]} c="#b09b7c" />
+      <mesh position={[2.0, 1.55, -1.2]}>
+        <coneGeometry args={[0.32, 0.4, 32, 1, true]} />
+        <meshStandardMaterial color="#fff3d1" side={THREE.DoubleSide} />
+      </mesh>
+    </group>
+  );
+}
+
+function Patient({
+  tape,
+  chooseTape,
+  onToggleSlack
+}: {
+  tape: number;
+  slackMode: boolean;
+  chooseTape: (thigh: number) => void;
+  onToggleSlack: () => void;
+}) {
+  return (
+    <group position={[0, 0, 0]}>
+      <Block p={[-0.65, 0.75, -0.35]} s={[1.45, 0.22, 2.1]} c="#8aa89c" />
+      <Block p={[-0.65, 0.93, -0.35]} s={[1.4, 0.2, 2.05]} c="#ffffff" />
+      {[-1.25, -0.05].map((bx) => (
+        <group key={bx}>
+          <Block p={[bx, 0.38, -1.25]} s={[0.08, 0.76, 0.08]} c="#6d8a7f" />
+          <Block p={[bx, 0.38, 0.55]} s={[0.08, 0.76, 0.08]} c="#6d8a7f" />
+        </group>
+      ))}
+      <Block p={[-0.65, 1.45, -1.35]} s={[1.45, 1.2, 0.12]} c="#c1d6cc" />
+
+      <Block p={[-0.65, 1.06, -0.9]} s={[0.8, 0.14, 0.5]} c="#e2e8f0" />
+      <Ball p={[-0.65, 2.45, -0.15]} s={[0.26, 0.3, 0.25]} c={skinTone} />
+      <Block p={[-0.65, 1.95, -0.15]} s={[0.74, 0.72, 0.38]} c="#cfe1f3" />
+      <Block p={[-0.65, 1.58, 0.02]} s={[0.76, 0.26, 0.46]} c="#b9d2e7" />
+
+      <mesh position={[-0.65, 1.62, 0.25]}>
+        <boxGeometry args={[0.78, 0.035, 0.02]} />
+        <meshStandardMaterial color="#0284c7" emissive="#0284c7" emissiveIntensity={0.3} />
+      </mesh>
+
+      {[-1.0, -0.3].map((tx, idx) => {
+        const thighNum = idx + 1;
+        const isTaped = tape === thighNum;
+        return (
+          <group key={tx}>
+            <Block
+              p={[tx, 1.35, 0.33]}
+              s={[0.32, 0.36, 0.92]}
+              c={skinTone}
+              onClick={() => chooseTape(thighNum)}
+            />
+            <Block p={[tx, 0.7, 0.7]} s={[0.26, 1.0, 0.26]} c={skinTone} />
+            <Block p={[tx, 0.18, 0.84]} s={[0.28, 0.16, 0.46]} c="#cbd5e1" />
+
+            {isTaped && (
+              <group position={[tx, 1.535, 0.44]}>
+                <Block p={[0, 0, 0]} s={[0.3, 0.035, 0.22]} c={tapeColor} onClick={onToggleSlack} />
+                <Block p={[0, 0.02, 0]} s={[0.28, 0.01, 0.04]} c="#38bdf8" />
+              </group>
+            )}
+          </group>
+        );
+      })}
+
+      {[-1.15, -0.15].map((ax) => (
+        <Block key={ax} p={[ax, 1.82, -0.1]} s={[0.18, 0.65, 0.22]} c={skinTone} />
+      ))}
+
+      <Ball p={[-0.65, 1.48, 0.25]} s={[0.09, 0.09, 0.05]} c="#0d9488" />
+    </group>
+  );
+}
+
+function DrainageBag({
+  h,
+  fill,
+  valve,
+  onValve,
+  onSelect,
+  stowed,
+  onStow,
+  fluidColor = '#f59e0b',
+  draggable = false
+}: {
+  h: number;
+  fill: number;
+  valve: boolean;
+  onValve: () => void;
+  onSelect: () => void;
+  wipe?: boolean;
+  stowed?: boolean;
+  onWipe?: () => void;
+  onStow?: () => void;
+  fluidColor?: string;
+  draggable?: boolean;
+}) {
+  return (
+    <group
+      position={[0.82, h, 0.58]}
+      onPointerDown={
+        draggable
+          ? undefined
+          : (e) => {
+              e.stopPropagation();
+            }
+      }
+    >
+      <RoundedBox
+        args={[0.66, 0.76, 0.14]}
+        radius={0.08}
+        onPointerDown={
+          draggable
+            ? undefined
+            : (e) => {
+                e.stopPropagation();
+              }
+        }
+        onClick={(e) => {
+          e.stopPropagation();
+          onSelect();
+        }}
+      >
+        <meshPhysicalMaterial
+          color="#d5f2f0"
+          transparent
+          opacity={0.65}
+          roughness={0.12}
+          transmission={0.4}
+          ior={1.3}
+        />
+      </RoundedBox>
+
+      <Block p={[0, -0.32 + fill * 0.3, 0]} s={[0.55, Math.max(0.015, fill * 0.6), 0.08]} c={fluidColor} />
+      <Block p={[0, 0.38, 0]} s={[0.68, 0.08, 0.15]} c="#0d9488" />
+      <Block p={[0, 0.44, 0]} s={[0.12, 0.12, 0.12]} c="#14b8a6" />
+
+      {[0, 1, 2, 3].map((gi) => (
+        <Block key={gi} p={[0.16, -0.24 + gi * 0.14, 0.085]} s={[0.14, 0.014, 0.01]} c="#0f766e" />
+      ))}
+
+      <Block p={[0, -0.45, 0]} s={[0.08, 0.22, 0.08]} c="#fef08a" />
+
+      <group rotation={[0, 0, valve ? Math.PI / 2 : 0]} position={[0, -0.55, 0]}>
+        <Block p={[0, 0, 0]} s={[0.26, 0.08, 0.15]} c={valve ? '#f59e0b' : '#0d9488'} onClick={onValve} />
+        <mesh
+          onClick={(e) => {
+            e.stopPropagation();
+            onValve();
+          }}
+        >
+          <sphereGeometry args={[0.22, 12, 12]} />
+          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+        </mesh>
+      </group>
+
+      <group
+        position={[0.24, -0.42, 0.08]}
+        onClick={
+          onStow
+            ? (e) => {
+                e.stopPropagation();
+                onStow();
+              }
+            : undefined
+        }
+      >
+        <Block p={[0, 0, 0]} s={[0.14, 0.12, 0.06]} c={stowed ? '#10b981' : '#94a3b8'} />
+      </group>
+
+      {stowed && <Block p={[0.24, -0.36, 0.09]} s={[0.06, 0.16, 0.06]} c="#fef08a" />}
+    </group>
+  );
+}
+
+// Cute Minimalist Cartoon 3D Nurse Nong Four (Requirement 5 & 6: ตาการ์ตูนน่ารักใสๆ ปากไม่แดง มัดรวบใส่เน็ต หมวกขีดเดียว ขยับปากยิ้มแย้มตอนพูด)
+function NurseModel({ paused, speaking = false }: { paused: boolean; speaking?: boolean }) {
+  const arm = useRef<THREE.Group>(null);
+  const eyes = useRef<THREE.Group>(null);
+  const head = useRef<THREE.Group>(null);
+  const mouth = useRef<THREE.Mesh>(null);
+
+  useFrame(({ clock }) => {
+    if (paused) return;
+    const t = clock.elapsedTime;
+    if (head.current) {
+      head.current.rotation.z = Math.sin(t * 1.1) * 0.035;
+      head.current.position.y = 2.18 + Math.sin(t * 1.8) * 0.012;
+    }
+    if (arm.current) {
+      arm.current.rotation.z = 0.28 + Math.sin(t * 2.0) * 0.12;
+    }
+    if (eyes.current) {
+      const blinkCycle = t % 4.0;
+      eyes.current.scale.y = blinkCycle > 3.82 && blinkCycle < 3.96 ? 0.08 : 1.0;
+    }
+    if (mouth.current) {
+      if (speaking) {
+        const talk = 0.35 + Math.abs(Math.sin(t * 11.5)) * 0.65;
+        mouth.current.scale.set(0.032, 0.008 + talk * 0.014, 0.012);
+        mouth.current.visible = true;
+      } else {
+        mouth.current.visible = false;
+      }
+    }
+  });
+
+  const fairSkin = '#fce8d8';
+  const darkHair = '#2c221e';
+
+  return (
+    <group position={[-1.9, 0, -0.2]} scale={0.76}>
+      {/* Minimalist White Collared Nurse Dress/Coat */}
+      <Block p={[0, 1.42, 0]} s={[0.62, 1.16, 0.38]} c="#ffffff" />
+      {/* Minimalist Lapel Collar */}
+      <Block p={[-0.12, 1.94, 0.18]} s={[0.16, 0.12, 0.04]} c="#f1f7f5" />
+      <Block p={[0.12, 1.94, 0.18]} s={[0.16, 0.12, 0.04]} c="#f1f7f5" />
+      {/* Subtle Minimal Name Tag */}
+      <Block p={[0.17, 1.72, 0.2]} s={[0.14, 0.07, 0.02]} c="#e2f1ed" />
+
+      {/* Cute Chibi/Cartoon Head Group */}
+      <group ref={head} position={[0, 2.18, 0]}>
+        {/* Hair Crown */}
+        <Ball p={[0, 0.05, -0.02]} s={[0.36, 0.38, 0.34]} c={darkHair} />
+        {/* Neatly Tied Back Bun inside Dark Hairnet */}
+        <Ball p={[0, -0.04, -0.32]} s={[0.18, 0.17, 0.16]} c="#1e1714" />
+        {/* Soft Rounded Cartoon Face */}
+        <Ball p={[0, -0.01, 0.08]} s={[0.32, 0.33, 0.27]} c={fairSkin} />
+
+        {/* Cute Side-Swept Front Bangs */}
+        <Ball p={[-0.14, 0.18, 0.24]} s={[0.18, 0.11, 0.1]} c={darkHair} />
+        <Ball p={[0.14, 0.18, 0.24]} s={[0.18, 0.11, 0.1]} c={darkHair} />
+
+        {/* Soft Pastel Peach Blush (แต่งหน้าบางอ่อน) */}
+        <Ball p={[-0.16, -0.05, 0.31]} s={[0.055, 0.032, 0.015]} c="#f4b6ac" />
+        <Ball p={[0.16, -0.05, 0.31]} s={[0.055, 0.032, 0.015]} c="#f4b6ac" />
+
+        {/* Cute Big Sparkling Cartoon Eyes (ตาการ์ตูนน่ารักใสๆ) */}
+        <group ref={eyes} position={[0, 0.03, 0.32]}>
+          {/* Left Eye */}
+          <Ball p={[-0.11, 0, 0]} s={[0.045, 0.058, 0.02]} c="#2b211e" />
+          <Ball p={[-0.095, 0.02, 0.016]} s={[0.018, 0.02, 0.01]} c="#ffffff" />
+          <Ball p={[-0.12, -0.018, 0.015]} s={[0.009, 0.01, 0.01]} c="#ffffff" />
+          {/* Right Eye */}
+          <Ball p={[0.11, 0, 0]} s={[0.045, 0.058, 0.02]} c="#2b211e" />
+          <Ball p={[0.125, 0.02, 0.016]} s={[0.018, 0.02, 0.01]} c="#ffffff" />
+          <Ball p={[0.1, -0.018, 0.015]} s={[0.009, 0.01, 0.01]} c="#ffffff" />
+        </group>
+
+        {/* Soft Natural Peach Smile - NOT RED (ปากไม่แดง ยิ้มแย้ม ขยับเบาๆ ตอนพูด) */}
+        <Line
+          points={[
+            [-0.045, -0.1, 0.34],
+            [0, -0.122, 0.348],
+            [0.045, -0.1, 0.34]
+          ]}
+          color="#c88a7e"
+          lineWidth={2.2}
+        />
+        <mesh ref={mouth} position={[0, -0.114, 0.345]} visible={false}>
+          <sphereGeometry args={[1, 16, 12]} />
+          <meshStandardMaterial color="#d8887e" roughness={0.6} />
+        </mesh>
+
+        {/* Minimalist Nurse Cap with Single Top Stripe (หมวกพยาบาลมีขีดบนเส้นเดียว) */}
+        <Block p={[0, 0.37, 0.06]} s={[0.48, 0.15, 0.22]} c="#ffffff" />
+        <Block p={[0, 0.41, 0.175]} s={[0.42, 0.022, 0.015]} c="#2b7569" />
+      </group>
+
+      {/* Right Arm Waving Gently */}
+      <group ref={arm} position={[0.35, 1.84, 0]}>
+        <Block p={[0.1, -0.16, 0.04]} s={[0.18, 0.48, 0.18]} c="#ffffff" />
+        <Ball p={[0.14, -0.42, 0.04]} s={[0.09, 0.1, 0.09]} c={fairSkin} />
+      </group>
+
+      {/* Left Arm Relaxed */}
+      <group position={[-0.35, 1.72, 0]}>
+        <Block p={[-0.04, -0.16, 0.04]} s={[0.18, 0.48, 0.18]} c="#ffffff" />
+        <Ball p={[-0.04, -0.42, 0.04]} s={[0.09, 0.1, 0.09]} c={fairSkin} />
+      </group>
+
+      {/* Legs & White Nurse Shoes */}
+      {[-0.16, 0.16].map((lx) => (
+        <group key={lx}>
+          <Block p={[lx, 0.45, 0]} s={[0.2, 0.82, 0.22]} c="#ffffff" />
+          <Block p={[lx, 0.05, 0.04]} s={[0.21, 0.1, 0.3]} c="#f1f5f9" />
+        </group>
+      ))}
+    </group>
+  );
+}
+
+// Animated Soap Bubbles & Water Rinse (Requirement 14: ขึ้นอนิเมชั่นฟองสบู่ ราดน้ำแล้วให้สบู่ไหลออก)
+function HygieneSoapAndWater({
+  active,
+  phase,
+  sex
+}: {
+  active: boolean;
+  phase: number; // 0 = mild soap lathering, 1 = water rinsing bubbles down, 2 = dry
+  sex: 'female' | 'male';
+}) {
+  const bubblesRef = useRef<THREE.Group>(null);
+  const waterStreamRef = useRef<THREE.Mesh>(null);
+  const rinseProgress = useRef(0);
+
+  useEffect(() => {
+    if (phase === 0) {
+      rinseProgress.current = 0;
+    }
+  }, [phase, sex]);
+
+  useFrame(({ clock }, delta) => {
+    const t = clock.elapsedTime;
+    if (phase === 1) {
+      // Water rinsing: bubbles flow downward and wash off
+      rinseProgress.current = Math.min(1.4, rinseProgress.current + delta * 0.45);
+      // Loop the rinse effect every 3.2 seconds so the user can clearly watch the soap wash away
+      if (rinseProgress.current >= 1.35) {
+        rinseProgress.current = 0;
+      }
+    } else {
+      rinseProgress.current = 0;
+    }
+
+    if (bubblesRef.current) {
+      const p = rinseProgress.current;
+      // Move bubbles down as water pours over them
+      bubblesRef.current.position.y = phase === 1 ? -p * 0.65 : Math.sin(t * 3) * 0.015;
+      bubblesRef.current.position.z = phase === 1 ? p * 0.08 : 0;
+      const scaleFade = phase === 1 ? Math.max(0.01, 1 - p * 0.75) : 1 + Math.sin(t * 4) * 0.08;
+      bubblesRef.current.scale.setScalar(scaleFade);
+    }
+
+    if (waterStreamRef.current) {
+      waterStreamRef.current.position.y = 1.26 + Math.sin(t * 10) * 0.02;
+    }
+  });
+
+  if (!active || phase === 2 || phase === 3) return null;
+
+  const baseY = sex === 'female' ? 1.15 : 1.38;
+  const baseZ = sex === 'female' ? 0.22 : 0.28;
+
+  return (
+    <group>
+      {/* Animated Soap Foam Bubbles (ฟองสบู่อ่อน) */}
+      {(phase === 0 || phase === 1) && (
+        <group ref={bubblesRef}>
+          {Array.from({ length: 26 }, (_, i) => {
+            const angle = (i / 26) * Math.PI * 2;
+            const radius = 0.04 + (i % 4) * 0.038;
+            const bx = Math.cos(angle * 2.3) * radius;
+            const by = baseY + Math.sin(angle * 1.7) * 0.16 - (i % 5) * 0.03;
+            const bz = baseZ + (i % 3) * 0.025;
+            const bSize = 0.022 + (i % 3) * 0.01;
+            return (
+              <Ball
+                key={i}
+                p={[bx, by, bz]}
+                s={[bSize, bSize, bSize]}
+                c={i % 2 === 0 ? '#ffffff' : '#ecfeff'}
+                opacity={0.9}
+                transparent
+              />
+            );
+          })}
+        </group>
+      )}
+
+      {/* Pouring Clean Water Stream washing away the soap (ราดน้ำสะอาดล้างฟองสบู่ไหลออก) */}
+      {phase === 1 && (
+        <group>
+          <mesh ref={waterStreamRef} position={[0, 1.26, baseZ + 0.08]}>
+            <cylinderGeometry args={[0.025, 0.065, 0.75, 20]} />
+            <meshStandardMaterial color="#7dd3fc" transparent opacity={0.62} roughness={0.15} />
+          </mesh>
+          {/* Water droplets / runoff */}
+          {Array.from({ length: 10 }, (_, i) => (
+            <Ball
+              key={`drop-${i}`}
+              p={[
+                Math.sin(i * 2.1) * 0.1,
+                0.75 - (i % 4) * 0.08,
+                baseZ + 0.05
+              ]}
+              s={[0.018, 0.026, 0.018]}
+              c="#bae6fd"
+              opacity={0.75}
+              transparent
+            />
+          ))}
+        </group>
+      )}
+    </group>
+  );
+}
+
+// Clinical Pelvic Training Mannequin for Genital Hygiene
+function Pelvis({
+  sex,
+  wipe,
+  phase,
+  act
+}: {
+  sex: 'female' | 'male';
+  wipe: boolean;
+  phase: number; // 0 = mild soap, 1 = water rinse, 2 = pat dry, 3 = foreskin return
+  act: () => void;
+}) {
+  const cloth = useRef<THREE.Group>(null);
+
+  useFrame(({ clock }) => {
+    if (cloth.current) {
+      const t = (clock.elapsedTime * 0.5) % 1;
+      if (sex === 'female') {
+        cloth.current.position.y = 1.35 - t * 0.55;
+        cloth.current.position.z = 0.52 - t * 0.15;
+      } else {
+        cloth.current.position.x = Math.sin(t * Math.PI * 2) * 0.12;
+        cloth.current.position.y = 1.32 + Math.cos(t * Math.PI * 2) * 0.08;
+      }
+    }
+  });
+
+  return (
+    <group position={[0, 0.1, 0.35]}>
+      <Block p={[0, 0.15, -0.1]} s={[1.8, 0.3, 1.4]} c="#ffffff" />
+      <Block p={[0, 0.28, 0.45]} s={[1.4, 0.08, 0.2]} c="#0d9488" />
+
+      <Block p={[0, 1.2, -0.18]} s={[1.35, 1.15, 0.45]} c={siliconeMannequin} />
+      {[-0.5, 0.5].map((gx) => (
+        <Block key={gx} p={[gx, 0.5, -0.1]} s={[0.42, 1.05, 0.5]} c={siliconeMannequin} />
+      ))}
+      <Block p={[0, 1.82, -0.13]} s={[1.4, 0.3, 0.5]} c="#99f6e4" />
+
+      {sex === 'female' ? (
+        <group>
+          <Ball p={[-0.14, 1.13, 0.08]} s={[0.12, 0.3, 0.1]} c="#dba995" />
+          <Ball p={[0.14, 1.13, 0.08]} s={[0.12, 0.3, 0.1]} c="#dba995" />
+          <Ball p={[-0.06, 1.12, 0.14]} s={[0.06, 0.2, 0.06]} c="#cf9581" />
+          <Ball p={[0.06, 1.12, 0.14]} s={[0.06, 0.2, 0.06]} c="#cf9581" />
+          <Ball p={[0, 1.25, 0.16]} s={[0.03, 0.03, 0.02]} c="#8b5cf6" />
+          <Line
+            points={[
+              [0, 1.25, 0.18],
+              [0.08, 1.16, 0.32],
+              [0.45, 1.0, 0.42],
+              [1.0, 0.6, 0.3]
+            ]}
+            color="#cfad62"
+            lineWidth={6}
+          />
+          <Ball p={[0, 1.08, 0.15]} s={[0.045, 0.07, 0.02]} c="#b07d6c" />
+          <Ball p={[0, 0.72, 0.08]} s={[0.035, 0.035, 0.015]} c="#9c6858" />
+
+          <group position={[0.3, 1.05, 0.25]}>
+            <Line points={[[0, 0.35, 0], [0, -0.35, 0]]} color="#0284c7" lineWidth={4} />
+            <Line points={[[-0.06, -0.28, 0], [0, -0.35, 0], [0.06, -0.28, 0]]} color="#0284c7" lineWidth={4} />
+          </group>
+        </group>
+      ) : (
+        <group>
+          <Block p={[0, 1.22, 0.2]} s={[0.22, 0.46, 0.26]} c="#d8ab94" />
+          <Ball p={[0, 1.48, 0.21]} s={[0.14, 0.12, 0.15]} c="#ce9c84" />
+          <mesh position={[0, phase === 3 ? 1.44 : 1.32, 0.2]}>
+            <cylinderGeometry args={[0.13, 0.14, 0.12, 24]} />
+            <meshStandardMaterial color="#c78f77" roughness={0.6} />
+          </mesh>
+          <Ball p={[0, 1.54, 0.22]} s={[0.03, 0.03, 0.02]} c="#8b5cf6" />
+          <Line
+            points={[
+              [0, 1.54, 0.24],
+              [0.15, 1.56, 0.38],
+              [0.55, 1.12, 0.42],
+              [1.0, 0.6, 0.3]
+            ]}
+            color="#cfad62"
+            lineWidth={6}
+          />
+          <Ball p={[-0.11, 0.94, 0.1]} s={[0.15, 0.18, 0.12]} c={siliconeMannequin} />
+          <Ball p={[0.11, 0.94, 0.1]} s={[0.15, 0.18, 0.12]} c={siliconeMannequin} />
+        </group>
+      )}
+
+      <mesh
+        position={[0, 1.2, 0.2]}
+        onClick={(e) => {
+          e.stopPropagation();
+          act();
+        }}
+      >
+        <boxGeometry args={[0.8, 0.9, 0.3]} />
+        <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      </mesh>
+
+      {/* Soap Foam & Water Rinse Animation */}
+      <HygieneSoapAndWater active={wipe} phase={phase} sex={sex} />
+
+      {/* Animated Washcloth / Hand */}
+      {wipe && phase !== 1 && (
+        <group ref={cloth}>
+          <ArticulatedHand p={[-0.14, 0.08, 0.54]} r={[0, 0, -0.6]} scale={0.9} />
+          <Block
+            p={[0, 0, 0.42]}
+            s={[0.26, 0.14, 0.05]}
+            c={phase === 0 ? '#ecfdf5' : '#ffffff'}
+          />
+          {phase === 0 &&
+            [-0.08, 0, 0.08].map((bx) => (
+              <Ball key={bx} p={[bx, 0.06, 0.46]} s={[0.038, 0.038, 0.038]} c="#ffffff" />
+            ))}
+        </group>
+      )}
+    </group>
+  );
+}
+
+// Hand Washing Simulation (IC 7 Steps: หน้า หลัง กลาง ปั้น โป้ง ปลาย ข้อ + Rinse & Dry)
+function Washing({ phase, paused, act }: { phase: number; paused: boolean; act: () => void }) {
+  const leftHand = useRef<THREE.Group>(null);
+  const rightHand = useRef<THREE.Group>(null);
+  const soapRunoffRef = useRef<THREE.Group>(null);
+
+  useFrame(({ clock }) => {
+    if (paused) return;
+    const t = clock.elapsedTime;
+    const rubFast = Math.sin(t * 8.0) * 0.12;
+    const rubMedium = Math.sin(t * 5.0) * 0.1;
+
+    if (leftHand.current && rightHand.current) {
+      if (phase === 0) {
+        // 1. หน้า: ฝ่ามือถูกัน (Palm to palm)
+        leftHand.current.position.set(-0.06, 1.1 + rubFast, 0.4);
+        leftHand.current.rotation.set(0, 0, -1.2);
+        rightHand.current.position.set(0.06, 1.1 - rubFast, 0.42);
+        rightHand.current.rotation.set(0, Math.PI, 1.2);
+      } else if (phase === 1) {
+        // 2. หลัง: ฝ่ามือถูหลังมือและซอกนิ้ว (Palm over dorsum with interlaced fingers)
+        leftHand.current.position.set(-0.05, 1.05, 0.4);
+        leftHand.current.rotation.set(0, 0, -1.5);
+        rightHand.current.position.set(rubMedium, 1.12, 0.48);
+        rightHand.current.rotation.set(-0.3, 0, 0);
+      } else if (phase === 2) {
+        // 3. กลาง: ฝ่ามือถูฝ่ามือและซอกนิ้ว (Palm to palm with fingers interlaced)
+        leftHand.current.position.set(-0.04, 1.1 + rubFast * 0.5, 0.42);
+        leftHand.current.rotation.set(0, 0.4, -1.1);
+        rightHand.current.position.set(0.04, 1.1 - rubFast * 0.5, 0.44);
+        rightHand.current.rotation.set(0, -0.4, 1.1);
+      } else if (phase === 3) {
+        // 4. ปั้น: หลังนิ้วมือถูฝ่ามือ (Backs of fingers to opposing palms with fingers interlocked)
+        leftHand.current.position.set(-0.08, 1.08, 0.44);
+        leftHand.current.rotation.set(0.5, 0, -1.3);
+        rightHand.current.position.set(0.08 + rubMedium, 1.1, 0.45);
+        rightHand.current.rotation.set(-0.5, Math.PI, 1.3);
+      } else if (phase === 4) {
+        // 5. โป้ง: ถูรอบนิ้วหัวแม่มือด้วยฝ่ามือ (Rotational rubbing of thumb clasped in palm)
+        leftHand.current.position.set(-0.1, 1.08, 0.42);
+        leftHand.current.rotation.set(0, 0, -1.4);
+        rightHand.current.position.set(-0.02 + Math.cos(t * 6) * 0.06, 1.1 + Math.sin(t * 6) * 0.06, 0.45);
+        rightHand.current.rotation.set(0, 0, 0.8);
+      } else if (phase === 5) {
+        // 6. ปลาย: ปลายนิ้วถูขวางฝ่ามือ (Fingertips rubbing circularly in opposing palm)
+        leftHand.current.position.set(-0.08, 1.06, 0.42);
+        leftHand.current.rotation.set(-0.35, 0, -1.5);
+        rightHand.current.position.set(-0.04 + Math.cos(t * 7) * 0.05, 1.15, 0.43 + Math.sin(t * 7) * 0.05);
+        rightHand.current.rotation.set(0.9, 0, 0.2);
+      } else if (phase === 6) {
+        // 7. ข้อ: ถูรอบข้อมือทั้งสองข้าง (Rotational rubbing around wrist)
+        leftHand.current.position.set(-0.12, 1.05, 0.42);
+        leftHand.current.rotation.set(0, 0, -1.2);
+        rightHand.current.position.set(-0.18, 0.92 + Math.sin(t * 6) * 0.05, 0.45 + Math.cos(t * 6) * 0.04);
+        rightHand.current.rotation.set(0.3, 0, 1.1);
+      } else {
+        // 8. ล้างน้ำสะอาดและเช็ดมือให้แห้ง
+        leftHand.current.position.set(-0.08, 0.98, 0.35);
+        leftHand.current.rotation.set(0, 0, -0.8);
+        rightHand.current.position.set(0.08, 0.98, 0.37);
+        rightHand.current.rotation.set(0, 0, 0.8);
+      }
+    }
+
+    if (soapRunoffRef.current && phase === 7) {
+      const cycle = (t * 0.7) % 1;
+      soapRunoffRef.current.position.y = -cycle * 0.38;
+      soapRunoffRef.current.scale.setScalar(Math.max(0.1, 1 - cycle * 0.8));
+    }
+  });
+
+  return (
+    <group position={[0, 0.15, 0]}>
+      <Block p={[0, 0.55, 0]} s={[2.2, 0.18, 1.3]} c="#ffffff" />
+      <mesh position={[0, 0.66, 0.05]} rotation={[-Math.PI / 2, 0, 0]}>
+        <torusGeometry args={[0.58, 0.08, 16, 48]} />
+        <meshStandardMaterial color="#cde3e8" roughness={0.3} />
+      </mesh>
+
+      <Block p={[0, 1.15, -0.45]} s={[0.08, 0.95, 0.09]} c="#94a3b8" />
+      <Block p={[0, 1.58, -0.22]} s={[0.08, 0.08, 0.55]} c="#94a3b8" />
+      <Block p={[0, 1.52, 0.02]} s={[0.06, 0.08, 0.06]} c="#64748b" />
+
+      <Block p={[-0.85, 0.92, -0.2]} s={[0.22, 0.45, 0.22]} c="#14b8a6" />
+      <Block p={[-0.85, 1.18, -0.2]} s={[0.05, 0.12, 0.05]} c="#94a3b8" />
+      <Block p={[-0.85, 1.24, -0.15]} s={[0.18, 0.04, 0.14]} c="#0f766e" />
+
+      <group
+        onPointerDown={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          act();
+        }}
+      >
+        <group ref={leftHand}>
+          <ArticulatedHand p={[0, 0, 0]} scale={1.05} isLeft={true} />
+        </group>
+        <group ref={rightHand}>
+          <ArticulatedHand p={[0, 0, 0]} scale={1.05} isLeft={false} />
+        </group>
+      </group>
+
+      {phase < 7 &&
+        Array.from({ length: 24 }, (_, i) => (
+          <Ball
+            key={i}
+            p={[
+              Math.sin(i * 1.8) * 0.24,
+              1.06 + Math.cos(i * 2.2) * 0.12,
+              0.55 + Math.sin(i * 3.1) * 0.06
+            ]}
+            s={[0.038, 0.038, 0.038]}
+            c="#ffffff"
+          />
+        ))}
+
+      {phase === 7 && (
+        <group position={[0, 1.25, 0.02]}>
+          <mesh>
+            <cylinderGeometry args={[0.03, 0.055, 0.6, 16]} />
+            <meshStandardMaterial color="#38bdf8" transparent opacity={0.7} />
+          </mesh>
+          {/* Soap Bubbles Washing Off with Water Stream */}
+          <group ref={soapRunoffRef} position={[0, -0.18, 0.3]}>
+            {Array.from({ length: 14 }, (_, i) => (
+              <Ball
+                key={`wash-${i}`}
+                p={[Math.sin(i * 2.4) * 0.18, Math.cos(i * 1.7) * 0.08, (i % 3) * 0.03]}
+                s={[0.03, 0.03, 0.03]}
+                c="#ffffff"
+                opacity={0.85}
+                transparent
+              />
+            ))}
+          </group>
+        </group>
+      )}
+    </group>
+  );
+}
+
+const CameraController = forwardRef<
+  {
+    reset: () => void;
+  },
+  { topic: SceneKind; locked: boolean }
+>((props, ref) => {
+  const { camera } = useThree();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const controlsRef = useRef<any>(null);
+
+  const defaultPos: V = props.topic === 'hygiene' ? [0, 1.5, 4.2] : [3.3, 2.9, 5.5];
+  const defaultTarget: V = props.topic === 'hygiene' ? [0, 1.25, 0.35] : [0, 1.25, 0.2];
+
+  useImperativeHandle(ref, () => ({
+    reset: () => {
+      if (controlsRef.current) {
+        camera.position.set(...defaultPos);
+        controlsRef.current.target.set(...defaultTarget);
+        controlsRef.current.update();
+      }
+    }
+  }));
+
+  return (
+    <OrbitControls
+      ref={controlsRef}
+      makeDefault
+      enabled={!props.locked && props.topic !== 'position'}
+      target={defaultTarget}
+      minDistance={1.1}
+      maxDistance={9.5}
+      enablePan={true}
+      screenSpacePanning={true}
+      panSpeed={1.5}
+      rotateSpeed={0.8}
+      zoomSpeed={1.1}
+      minPolarAngle={0.1}
+      maxPolarAngle={Math.PI / 2 + 0.12}
+    />
+  );
+});
+
+export default function GuidedScene({ topic, visual, paused, speaking = false, mode = 'learn', onAction }: Props) {
+  const [height, setHeight] = useState(0.9);
+  const [valve, setValve] = useState(false);
+  const [container, setContainer] = useState(false);
+  const [fill, setFill] = useState(0.8);
+  const [wipe, setWipe] = useState(false);
+  const [stowed, setStowed] = useState(false);
+  const [tape, setTape] = useState(0);
+  const [slackTight, setSlackTight] = useState(false);
+  const [straight, setStraight] = useState(false);
+  const [phase, setPhase] = useState(0);
+  const [sex, setSex] = useState<'female' | 'male'>('female');
+  const [connected, setConnected] = useState(false);
+  const [junctionFolded, setJunctionFolded] = useState(false);
+  const [junctionWiped, setJunctionWiped] = useState(false);
+  const [troubleDemo, setTroubleDemo] = useState<'kink' | 'belly' | 'leak' | 'flank' | 'blood' | 'fever'>('kink');
+  const [feedback, setFeedback] = useState('');
+  const [drag, setDrag] = useState(false);
+
+  const cameraCtrl = useRef<{ reset: () => void }>(null);
+
+  const auto = mode === 'learn';
+  const hint = mode !== 'challenge';
+  const prevTopic = useRef(topic);
+  const prevMode = useRef(mode);
+
+  const record = (actionStr: string) => {
+    onAction?.(actionStr);
+    setFeedback(actionStr);
+  };
+
+  useEffect(() => {
+    if (!auto && prevTopic.current === topic && prevMode.current === mode) return;
+    prevMode.current = mode;
+
+    setHeight(
+      topic === 'position' && visual === 0
+        ? 1.95
+        : topic === 'position' && visual === 2
+        ? 0.32
+        : 0.95
+    );
+    setValve(auto && topic === 'drain' && visual === 2);
+    setContainer(auto && visual >= 1);
+    setFill(auto && visual >= 3 ? 0.05 : 0.8);
+    setWipe(auto && ((topic === 'drain' && visual === 3) || (topic === 'hygiene' && visual >= 1 && visual <= 3)));
+    setStowed(auto && topic === 'drain' && visual >= 3);
+    setTape(auto && topic === 'secure' && visual > 0 ? 1 : 0);
+    setSlackTight(false);
+    setStraight(auto && topic === 'tube' && visual > 0);
+    setConnected(auto && topic === 'change' && (visual <= 1 || visual >= 3));
+    setJunctionFolded(auto && topic === 'change' && visual === 2);
+    setJunctionWiped(auto && topic === 'change' && visual >= 2);
+    if (topic === 'trouble') {
+      if (visual === 0) {
+        setTroubleDemo('kink');
+        setStraight(false);
+      } else if (visual === 1) {
+        setTroubleDemo('belly');
+        setStraight(true);
+      } else {
+        setTroubleDemo('fever');
+        setStraight(true);
+      }
+    }
+    // For hygiene topic, sync phase with visual step so soap bubbles (visual 1, 2) and water rinse (visual 3) play automatically!
+    if (topic === 'hygiene') {
+      setSex(visual === 2 ? 'male' : 'female');
+      setPhase(visual === 3 ? 1 : visual >= 4 ? 2 : 0);
+    } else {
+      setPhase(0);
+    }
+    setFeedback('');
+
+    if (prevTopic.current !== topic) {
+      cameraCtrl.current?.reset();
+      prevTopic.current = topic;
+    }
+  }, [topic, visual, mode, auto]);
+
+  useEffect(() => {
+    if (paused) return;
+    const interval = setInterval(() => {
+      if (topic === 'drain' && valve && container) {
+        setFill((n) => drainTick(n, true, true, 0.08));
+      }
+    }, 100);
+    return () => clearInterval(interval);
+  }, [paused, topic, valve, container]);
+
+  useEffect(() => {
+    if (!auto || paused || topic !== 'hands') return;
+    const interval = setInterval(() => setPhase((p) => (p + 1) % 8), 2600);
+    return () => clearInterval(interval);
+  }, [auto, paused, topic]);
+
+  const toggleValve = () => {
+    if (paused) return;
+    if (!valve && !container) {
+      record('จัดภาชนะรองใต้ปลายก๊อกก่อนเปิดนะคะ');
+      return;
+    }
+    setValve((v) => !v);
+    record(valve ? 'ปิดก๊อกระบายให้สนิท' : 'เปิดก๊อกระบายปัสสาวะ');
+  };
+
+  const doWipeSpout = () => {
+    if (valve) {
+      record('ปิดก๊อกให้สนิทก่อนเช็ดปลายก๊อกด้วยแอลกอฮอล์นะคะ');
+      return;
+    }
+    setWipe(true);
+    record('เช็ดปลายก๊อกด้วยสำลีชุบแอลกอฮอล์');
+  };
+
+  const doStowSpout = () => {
+    if (valve || !wipe) {
+      record('ปิดก๊อกและเช็ดแอลกอฮอล์ให้สะอาดก่อนเก็บปลายก๊อกนะคะ');
+      return;
+    }
+    setStowed(true);
+    record('เก็บปลายก๊อกเข้าซองเก็บอุปกรณ์เรียบร้อย');
+  };
+
+  const chooseTape = (thigh: number) => {
+    if (topic !== 'secure') return;
+    setTape(thigh);
+    record(thigh === 1 ? 'แปะเทปที่หน้าขาขวา เหลือระยะหย่อนพอดี' : 'แปะเทปที่หน้าขาซ้าย เหลือระยะหย่อนพอดี');
+  };
+
+  const handPhases = [
+    '1. หน้า: ฝ่ามือถูกัน',
+    '2. หลัง: ฝ่ามือถูหลังมือและซอกนิ้ว',
+    '3. กลาง: ฝ่ามือถูฝ่ามือและซอกนิ้ว',
+    '4. ปั้น: หลังนิ้วมือถูฝ่ามือ',
+    '5. โป้ง: ถูรอบนิ้วหัวแม่มือ',
+    '6. ปลาย: ปลายนิ้วถูขวางฝ่ามือ',
+    '7. ข้อ: ถูรอบข้อมือ',
+    'ล้างน้ำสะอาดและเช็ดแห้ง'
+  ];
+
+  const WAIST_Y = 1.62;
+  const isAboveWaist = height > 1.6;
+  const isTouchingFloor = height < 0.4;
+  const isOptimalPosition = !isAboveWaist && !isTouchingFloor;
+
+  const showBodyTopics = ['position', 'tube', 'secure', 'trouble', 'change'].includes(topic);
+
+  const insertionPoint: V = [-0.65, 1.48, 0.25];
+  const bagInlet: V = [0.82, height + 0.38, 0.58];
+
+  let catheterPoints: V[];
+  if ((!straight && topic === 'tube') || (topic === 'trouble' && (!straight || troubleDemo === 'kink'))) {
+    // Realistic sharp Z-kink / loop in the catheter tube (สายพับงอจริง)
+    catheterPoints = [
+      insertionPoint,
+      [-0.35, 1.32, 0.52],
+      [-0.02, 1.44, 0.58],
+      [-0.18, 1.14, 0.58],
+      [0.24, 1.36, 0.62],
+      [0.12, 1.12, 0.6],
+      bagInlet
+    ];
+  } else if (topic === 'secure' && tape > 0) {
+    const thighX = tape === 1 ? -1.0 : -0.3;
+    if (slackTight) {
+      catheterPoints = [insertionPoint, [thighX, 1.54, 0.44], bagInlet];
+    } else {
+      catheterPoints = [
+        insertionPoint,
+        [thighX - 0.05, 1.45, 0.42],
+        [thighX, 1.54, 0.44],
+        [0.3, 1.15, 0.65],
+        bagInlet
+      ];
+    }
+  } else {
+    catheterPoints = [
+      insertionPoint,
+      [-0.25, Math.min(1.35, height + 0.1), 0.55],
+      [0.35, Math.min(1.15, height + 0.05), 0.65],
+      bagInlet
+    ];
+  }
+
+  return (
+    <div className="virtual-lab">
+      <div className="guided-stage">
+        <Suspense fallback={<div className="stage-loading">กำลังเตรียมห้องสาธิต 3 มิติ…</div>}>
+          <Canvas shadows dpr={[1, 1.5]} camera={{ position: [3.3, 2.9, 5.5], fov: 42 }}>
+            <color attach="background" args={['#e6f0eb']} />
+            <ambientLight intensity={1.5} />
+            <directionalLight position={[2, 6, 4]} intensity={2.0} castShadow />
+
+            <Room />
+
+            {topic !== 'hygiene' && <NurseModel paused={paused} speaking={speaking} />}
+
+            {showBodyTopics && (
+              <>
+                <Patient
+                  tape={tape}
+                  slackMode={slackTight}
+                  chooseTape={chooseTape}
+                  onToggleSlack={() => {
+                    setSlackTight((s) => !s);
+                    record(slackTight ? 'จัดสายหย่อนพอดี ไม่ตึงรั้ง' : 'จำลองสายตึงรั้งเกินไป');
+                  }}
+                />
+
+                {topic === 'position' && (
+                  <>
+                    <Line points={[[-1.4, WAIST_Y, 0.6], [1.4, WAIST_Y, 0.6]]} color="#0284c7" lineWidth={4} />
+                    <Line
+                      points={[[-1.4, 1.48, 0.6], [1.4, 1.48, 0.6]]}
+                      color="#0d9488"
+                      dashed
+                      dashSize={0.08}
+                      gapSize={0.05}
+                    />
+                    <Line
+                      points={[[0.82, WAIST_Y, 0.6], [0.82, height + 0.38, 0.6]]}
+                      color={isAboveWaist ? '#dc2626' : isTouchingFloor ? '#ea580c' : '#10b981'}
+                      lineWidth={5}
+                    />
+                  </>
+                )}
+
+                {topic !== 'change' && (
+                  <>
+                    <Line
+                      points={catheterPoints}
+                      color={
+                        topic === 'trouble' && (troubleDemo === 'blood' || visual === 2)
+                          ? '#dc2626'
+                          : (slackTight && topic === 'secure') ||
+                            (!straight && topic === 'tube') ||
+                            (topic === 'trouble' && (!straight || troubleDemo === 'kink'))
+                          ? '#ef4444'
+                          : '#d4af37'
+                      }
+                      lineWidth={6}
+                      onClick={() => {
+                        setStraight(true);
+                        if (topic === 'trouble' && troubleDemo === 'kink') {
+                          record('คลายจุดที่สายพับงอออก');
+                        } else {
+                          record('จัดสายให้คลายพับงอ');
+                        }
+                      }}
+                    />
+
+                    {/* Visual Symptom Demonstrations for topic === 'trouble' (เมื่อมีปัญหา) */}
+                    {topic === 'trouble' && (
+                      <group>
+                        {/* 1. สายพับงอ (Kinked tube highlight marker) */}
+                        {(!straight || troubleDemo === 'kink') && (
+                          <group position={[-0.08, 1.28, 0.58]}>
+                            <mesh>
+                              <torusGeometry args={[0.18, 0.025, 16, 32]} />
+                              <meshStandardMaterial color="#dc2626" emissive="#dc2626" emissiveIntensity={0.45} />
+                            </mesh>
+                          </group>
+                        )}
+
+                        {/* 2. ปวดท้องน้อย (Lower abdominal / bladder pain pulsing red glow) */}
+                        {(visual === 1 || troubleDemo === 'belly') && (
+                          <group position={[-0.65, 1.56, 0.28]}>
+                            <Ball p={[0, 0, 0]} s={[0.22, 0.15, 0.09]} c="#ef4444" opacity={0.78} transparent />
+                            <Ball p={[0, 0, 0.02]} s={[0.3, 0.21, 0.06]} c="#fca5a5" opacity={0.45} transparent />
+                          </group>
+                        )}
+
+                        {/* 3. ปัสสาวะรั่วซึมรอบสาย (Urine leaking around catheter insertion site) */}
+                        {(visual === 1 || troubleDemo === 'leak') && (
+                          <group position={[-0.65, 1.44, 0.29]}>
+                            <Ball p={[-0.06, -0.04, 0.03]} s={[0.035, 0.055, 0.025]} c="#f59e0b" />
+                            <Ball p={[0.05, -0.08, 0.04]} s={[0.03, 0.05, 0.025]} c="#f59e0b" />
+                            <Ball p={[0, -0.13, 0.02]} s={[0.14, 0.025, 0.12]} c="#fbbf24" opacity={0.85} transparent />
+                          </group>
+                        )}
+
+                        {/* 4. ปวดเอว / ปวดสีข้างและหลัง (Flank / lower back pain pulsing indicators on both sides of waist) */}
+                        {(visual === 2 || troubleDemo === 'flank') && (
+                          <group>
+                            <Ball p={[-1.02, 1.68, 0.16]} s={[0.14, 0.18, 0.1]} c="#dc2626" opacity={0.82} transparent />
+                            <Ball p={[-0.28, 1.68, 0.16]} s={[0.14, 0.18, 0.1]} c="#dc2626" opacity={0.82} transparent />
+                            <Line points={[[-1.18, 1.74, 0.25], [-1.05, 1.68, 0.25]]} color="#ef4444" lineWidth={4} />
+                            <Line points={[[-0.12, 1.74, 0.25], [-0.25, 1.68, 0.25]]} color="#ef4444" lineWidth={4} />
+                          </group>
+                        )}
+
+                        {/* 5. มีไข้ 38 องศาเซลเซียส (3D Clinical Thermometer showing red mercury column & 38°C fever) */}
+                        {(visual === 2 || troubleDemo === 'fever') && (
+                          <group position={[-0.12, 2.38, 0.25]}>
+                            {/* White thermometer body */}
+                            <Block p={[0, 0, 0]} s={[0.22, 0.72, 0.08]} c="#ffffff" />
+                            {/* Thermometer outer rim */}
+                            <Block p={[0, 0, -0.01]} s={[0.25, 0.75, 0.06]} c="#fca5a5" />
+                            {/* Red bulb at bottom */}
+                            <Ball p={[0, -0.26, 0.04]} s={[0.065, 0.065, 0.05]} c="#dc2626" />
+                            {/* High red mercury column up to 38°C+ */}
+                            <Block p={[0, -0.02, 0.045]} s={[0.042, 0.44, 0.03]} c="#dc2626" />
+                            {/* 38°C tick marks */}
+                            {[-0.12, 0, 0.12, 0.2].map((ty, idx) => (
+                              <Block key={idx} p={[0.055, ty, 0.045]} s={[0.045, 0.012, 0.02]} c="#1e293b" />
+                            ))}
+                            {/* Red fever flush on patient's cheeks/forehead */}
+                            <Ball p={[-0.53, 0.1, -0.32]} s={[0.18, 0.09, 0.06]} c="#ef4444" opacity={0.55} transparent />
+                          </group>
+                        )}
+                      </group>
+                    )}
+
+                    <group
+                      onPointerDown={(e) => {
+                        e.stopPropagation();
+                        if (topic !== 'position') return;
+                        setDrag(true);
+                        try {
+                          (e.target as unknown as Element).setPointerCapture(e.pointerId);
+                        } catch {}
+                        const p = new THREE.Vector3();
+                        if (e.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 0, 1), -0.58), p)) {
+                          setHeight(Math.min(2.1, Math.max(0.3, p.y)));
+                        }
+                      }}
+                      onPointerMove={(e) => {
+                        if (!drag) return;
+                        e.stopPropagation();
+                        const p = new THREE.Vector3();
+                        if (e.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 0, 1), -0.58), p)) {
+                          setHeight(Math.min(2.1, Math.max(0.3, p.y)));
+                        }
+                      }}
+                      onPointerUp={(e) => {
+                        e.stopPropagation();
+                        if (!drag) return;
+                        setDrag(false);
+                        try {
+                          (e.target as unknown as Element).releasePointerCapture(e.pointerId);
+                        } catch {}
+                        record('ปรับระดับถุง: ' + bagStatus(height));
+                      }}
+                      onPointerCancel={() => setDrag(false)}
+                    >
+                      <DrainageBag
+                        h={height}
+                        fill={
+                          topic === 'trouble' && (!straight || troubleDemo === 'kink' || troubleDemo === 'belly')
+                            ? 0.08
+                            : 0.55
+                        }
+                        fluidColor={
+                          topic === 'trouble' && (visual === 2 || troubleDemo === 'blood') ? '#dc2626' : '#f59e0b'
+                        }
+                        draggable={topic === 'position'}
+                        valve={false}
+                        onValve={() => {}}
+                        onSelect={() => {
+                          if (topic === 'position') {
+                            setHeight((prev) => (prev > 1.3 ? 0.95 : prev > 0.5 ? 0.32 : 1.85));
+                            record('คลิกปรับระดับถุงปัสสาวะ');
+                          } else {
+                            record('เลือกถุงปัสสาวะ');
+                          }
+                        }}
+                      />
+                    </group>
+                  </>
+                )}
+              </>
+            )}
+
+            {topic === 'hands' && (
+              <Washing
+                phase={phase}
+                paused={paused}
+                act={() => {
+                  setPhase((p) => (p + 1) % 8);
+                  record(handPhases[(phase + 1) % 8]);
+                }}
+              />
+            )}
+
+            {topic === 'drain' && (
+              <>
+                <DrainageBag
+                  h={1.65}
+                  fill={fill}
+                  valve={valve}
+                  onValve={toggleValve}
+                  onSelect={() => record('เลือกถุงปัสสาวะ')}
+                  wipe={wipe}
+                  stowed={stowed}
+                  onWipe={doWipeSpout}
+                  onStow={doStowSpout}
+                />
+
+                <group
+                  position={[container ? 0.82 : 1.7, 0, 0.58]}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setContainer((v) => !v);
+                    if (valve) setValve(false);
+                    record(container ? 'ย้ายภาชนะออก' : 'วางภาชนะรองใต้ก๊อก');
+                  }}
+                >
+                  <mesh position={[0, 0.26, 0]}>
+                    <cylinderGeometry args={[0.34, 0.28, 0.46, 32, 1, true]} />
+                    <meshStandardMaterial color="#bae6fd" transparent opacity={0.65} side={THREE.DoubleSide} />
+                  </mesh>
+                  <mesh position={[0, 0.05 + (0.8 - fill) * 0.24, 0]}>
+                    <cylinderGeometry args={[0.27, 0.26, Math.max(0.01, (0.8 - fill) * 0.4), 32]} />
+                    <meshStandardMaterial color="#f59e0b" />
+                  </mesh>
+                </group>
+
+                {valve && container && fill > 0 && (
+                  <mesh position={[0.82, 0.8, 0.58]}>
+                    <cylinderGeometry args={[0.018, 0.022, 0.65, 12]} />
+                    <meshStandardMaterial color="#f59e0b" transparent opacity={0.85} />
+                  </mesh>
+                )}
+
+                {wipe && (
+                  <group
+                    position={[0.85, 1.15, 0.7]}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      doWipeSpout();
+                    }}
+                  >
+                    <Ball p={[0, 0, 0]} s={[0.11, 0.08, 0.06]} c="#ffffff" />
+                    <ArticulatedHand p={[-0.18, 0.07, 0.1]} r={[0, 0, -0.8]} scale={0.8} />
+                  </group>
+                )}
+
+                <Block p={[-0.1, 0.55, 0.5]} s={[0.24, 0.16, 0.14]} c="#ffffff" onClick={doWipeSpout} />
+              </>
+            )}
+
+            {topic === 'secure' && tape === 0 && (
+              <Block p={[0.7, 0.2, 1]} s={[0.4, 0.04, 0.22]} c="#ffffff" onClick={() => chooseTape(1)} />
+            )}
+
+            {topic === 'change' && (
+              <>
+                {/* Foley Catheter Tube coming from Patient to the Catheter-Bag Junction (ข้อต่อที่ต่อจากสายสวนปัสสาวะ) */}
+                <Line
+                  points={
+                    junctionFolded
+                      ? [
+                          insertionPoint,
+                          [-0.45, 1.47, 0.38],
+                          [-0.26, 1.56, 0.48],
+                          [-0.22, 1.43, 0.52],
+                          [-0.14, 1.46, 0.55]
+                        ]
+                      : [
+                          insertionPoint,
+                          [-0.4, 1.47, 0.42],
+                          [-0.14, 1.46, 0.55]
+                        ]
+                  }
+                  color="#d4af37"
+                  lineWidth={7}
+                  onClick={() => {
+                    setJunctionFolded((f) => !f);
+                    record(junctionFolded ? 'คลายสายสวนปัสสาวะที่พับไว้' : 'พับสายสวนปัสสาวะเหนือข้อต่อไว้ชั่วคราว');
+                  }}
+                />
+
+                {/* Catheter Funnel / Junction Port on the Foley Catheter (ข้อต่อสายสวนปัสสาวะ) */}
+                <group
+                  position={[-0.08, 1.46, 0.55]}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!junctionWiped) {
+                      setJunctionWiped(true);
+                      record('เช็ดรอบข้อต่อสายสวนปัสสาวะด้วยสำลีชุบแอลกอฮอล์');
+                    } else {
+                      setConnected((c) => !c);
+                      record(connected ? 'ปลดถุงเดิมออกจากข้อต่อสายสวนปัสสาวะ' : 'สวมหัวต่อถุงใหม่เข้ากับข้อต่อสายสวนปัสสาวะ');
+                    }
+                  }}
+                >
+                  {/* Highlight ring around the catheter junction */}
+                  <mesh rotation={[0, Math.PI / 2, 0]}>
+                    <torusGeometry args={[0.13, 0.02, 16, 32]} />
+                    <meshStandardMaterial
+                      color={junctionWiped ? '#10b981' : '#0284c7'}
+                      emissive={junctionWiped ? '#10b981' : '#0284c7'}
+                      emissiveIntensity={0.35}
+                    />
+                  </mesh>
+                  {/* Catheter funnel end */}
+                  <Block p={[-0.05, 0, 0]} s={[0.14, 0.09, 0.09]} c="#f59e0b" />
+                  {/* Stepped connector tip from bag tubing */}
+                  <Block
+                    p={[connected ? 0.05 : 0.22, connected ? 0 : -0.06, 0]}
+                    s={[0.12, 0.075, 0.075]}
+                    c={junctionWiped ? '#0d9488' : '#38bdf8'}
+                  />
+                </group>
+
+                {/* Alcohol Cotton Swab Wiping the Catheter Junction (สำลีชุบแอลกอฮอล์เช็ดข้อต่อสายสวน) */}
+                {(junctionWiped || visual === 2) && (
+                  <group
+                    position={[-0.08, 1.62, 0.62]}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setJunctionWiped(true);
+                      record('เช็ดรอบข้อต่อสายสวนปัสสาวะด้วยสำลีชุบแอลกอฮอล์');
+                    }}
+                  >
+                    <Block p={[0, 0, 0]} s={[0.14, 0.14, 0.04]} c="#e0f2fe" />
+                    <Ball p={[0, -0.06, 0.02]} s={[0.06, 0.06, 0.04]} c="#ffffff" />
+                  </group>
+                )}
+
+                {/* Bag Tubing from Catheter Junction to Active Drainage Bag */}
+                <Line
+                  points={[
+                    [connected ? 0.0 : 0.18, connected ? 1.46 : 1.4, 0.55],
+                    [0.45, 1.38, 0.57],
+                    [0.82, 1.33, 0.58]
+                  ]}
+                  color="#bae6fd"
+                  lineWidth={5}
+                />
+
+                {/* Old Bag (set aside on tray when disconnected) */}
+                {!connected && (
+                  <group position={[0.45, -0.35, -0.35]} scale={0.78}>
+                    <DrainageBag
+                      h={0.95}
+                      fill={0.05}
+                      valve={false}
+                      onValve={() => {}}
+                      onSelect={() => {
+                        setConnected(false);
+                        record('แยกถุงปัสสาวะใบเดิมออก');
+                      }}
+                    />
+                  </group>
+                )}
+
+                {/* New Clean Drainage Bag connected via tubing to the Catheter Junction */}
+                <DrainageBag
+                  h={0.95}
+                  fill={connected ? 0.15 : 0.02}
+                  valve={false}
+                  onValve={() => {}}
+                  onSelect={() => {
+                    if (!junctionWiped) {
+                      setJunctionWiped(true);
+                    }
+                    setConnected(true);
+                    record('สวมหัวต่อถุงใหม่เข้ากับข้อต่อสายสวนปัสสาวะให้แน่นสนิท');
+                  }}
+                />
+              </>
+            )}
+
+            {topic === 'hygiene' && (
+              <Pelvis
+                sex={sex}
+                wipe={wipe && !paused}
+                phase={phase}
+                act={() => {
+                  setWipe(true);
+                  record(sex === 'female' ? 'ใช้สบู่อ่อนล้างและเช็ดหน้าไปหลัง' : 'ใช้สบู่อ่อนทำความสะอาดรอบรูเปิด');
+                }}
+              />
+            )}
+
+            {topic === 'water' && (
+              <>
+                <mesh position={[-0.2, 0.85, 0.4]}>
+                  <cylinderGeometry args={[0.28, 0.22, 1.1, 32, 1, true]} />
+                  <meshPhysicalMaterial color="#38bdf8" transparent opacity={0.6} side={THREE.DoubleSide} />
+                </mesh>
+                <DrainageBag
+                  h={1.3}
+                  fill={0.65}
+                  valve={false}
+                  onValve={() => {}}
+                  onSelect={() => record('สังเกตสีปัสสาวะเหลืองอ่อน')}
+                />
+              </>
+            )}
+
+            {topic === 'followup' && (
+              <group position={[0, 1.2, 0.3]}>
+                <Block p={[0, 0, 0]} s={[1.7, 1.5, 0.12]} c="#ffffff" />
+                <Block p={[0, 0.65, 0.08]} s={[1.7, 0.25, 0.06]} c="#0d9488" />
+                {Array.from({ length: 14 }, (_, i) => (
+                  <Block
+                    key={i}
+                    p={[-0.65 + (i % 7) * 0.22, 0.25 - Math.floor(i / 7) * 0.4, 0.08]}
+                    s={[0.15, 0.18, 0.05]}
+                    c={i === 13 ? '#f59e0b' : '#e0f2fe'}
+                    onClick={() => record('ตรวจวันนัดเปลี่ยนสายทุก 2 สัปดาห์')}
+                  />
+                ))}
+              </group>
+            )}
+
+            <ContactShadows position={[0, 0.005, 0]} scale={8} opacity={0.3} blur={2} far={4} />
+            <CameraController ref={cameraCtrl} topic={topic} locked={drag} />
+          </Canvas>
+        </Suspense>
+
+        <span className="stage-corner">
+          ห้องสาธิต 3D ·{' '}
+          {mode === 'learn'
+            ? 'CathLearn · ดูสาธิต'
+            : mode === 'practice'
+            ? 'CathPractice · ฝึกทำ'
+            : 'CathChallenge · ลองเอง'}
+        </span>
+
+        {topic === 'position' && hint && (
+          <div
+            className={`bag-waist-badge ${
+              isAboveWaist ? 'badge-danger' : isTouchingFloor ? 'badge-warning' : 'badge-safe'
+            }`}
+          >
+            {isAboveWaist
+              ? 'ถุงสูงกว่าระดับเอว ปัสสาวะอาจไหลย้อนกลับ'
+              : isTouchingFloor
+              ? 'ก้นถุงแตะพื้น เสี่ยงต่อการปนเปื้อนเชื้อ'
+              : 'ระดับเหมาะสม: ต่ำกว่าระดับเอวและกระเพาะปัสสาวะ ไม่แตะพื้น'}
+          </div>
+        )}
+
+        {topic === 'trouble' && (visual === 2 || troubleDemo === 'fever') && (
+          <div className="bag-waist-badge badge-danger">
+            ปรอทวัดไข้สูง 38.0 °C · มีอาการปวดเอว หรือปัสสาวะปนเลือดสีแดงสด ต้องรีบพบแพทย์ทันที
+          </div>
+        )}
+      </div>
+
+      {/* Interactive Controls Panel Below Canvas */}
+      <div className="lab-controls">
+        <div className="camera-help">
+          <span>
+            {topic === 'position'
+              ? 'โหมดปรับระดับถุง: หน้าจอล็อกมุมมองไว้เพื่อให้คลิกและลากถุงปัสสาวะขึ้น-ลงได้โดยหน้าจอไม่ขยับ'
+              : 'ลากเพื่อหมุนมุมมอง · คลิกขวาหรือสองนิ้วลากเพื่อเลื่อนซ้าย-ขวา · ล้อเมาส์เพื่อซูม'}
+          </span>
+          <button onClick={() => cameraCtrl.current?.reset()}>คืนมุมมองตั้งต้น</button>
+        </div>
+
+        {topic === 'position' && (
+          <>
+            <label>
+              ระดับถุงปัสสาวะ เทียบกับระดับเอวผู้ป่วย
+              <input
+                aria-label="แถบเลื่อนระดับถุงปัสสาวะ"
+                type="range"
+                min="0.3"
+                max="2.1"
+                step="0.02"
+                value={height}
+                onChange={(e) => setHeight(Number(e.target.value))}
+                onPointerUp={() => record('ปรับระดับถุง: ' + bagStatus(height))}
+              />
+            </label>
+            <div className="control-row">
+              <button
+                onClick={() => {
+                  setHeight((h) => Math.max(0.3, h - 0.15));
+                  record('ลดระดับถุง');
+                }}
+              >
+                ลดระดับถุง
+              </button>
+              <button
+                onClick={() => {
+                  setHeight((h) => Math.min(2.1, h + 0.15));
+                  record('เพิ่มระดับถุง');
+                }}
+              >
+                เพิ่มระดับถุง
+              </button>
+              <button
+                className={isOptimalPosition ? 'selected' : ''}
+                onClick={() => {
+                  setHeight(0.95);
+                  record('จัดระดับถุงต่ำกว่าเอว');
+                }}
+              >
+                จัดต่ำกว่าเอว (เหมาะสม)
+              </button>
+              {hint && (
+                <>
+                  <button
+                    className={isAboveWaist ? 'selected' : ''}
+                    onClick={() => {
+                      setHeight(1.85);
+                      record('จำลองถุงสูงกว่าเอว');
+                    }}
+                  >
+                    สูงกว่าเอว (ตัวอย่างที่ควรเลี่ยง)
+                  </button>
+                  <button
+                    className={isTouchingFloor ? 'selected' : ''}
+                    onClick={() => {
+                      setHeight(0.32);
+                      record('จำลองถุงแตะพื้น');
+                    }}
+                  >
+                    แตะพื้น (ตัวอย่างที่ควรเลี่ยง)
+                  </button>
+                </>
+              )}
+            </div>
+            {hint && (
+              <p className={isAboveWaist ? 'text-danger' : isTouchingFloor ? 'text-warning' : 'text-safe'}>
+                สถานะ: {bagStatus(height)} (เส้นสีน้ำเงิน = ระดับเอวผู้ป่วย)
+              </p>
+            )}
+          </>
+        )}
+
+        {topic === 'hands' && (
+          <>
+            <div className="control-row">
+              {handPhases.map((hp, i) => (
+                <button
+                  key={hp}
+                  className={phase === i ? 'selected' : ''}
+                  onClick={() => {
+                    setPhase(i);
+                    record(hp);
+                  }}
+                >
+                  {hp}
+                </button>
+              ))}
+            </div>
+            {hint && <p aria-live="polite">ขั้นตอนปัจจุบัน: {handPhases[phase]}</p>}
+          </>
+        )}
+
+        {topic === 'drain' && (
+          <>
+            <div className="control-row">
+              <button
+                onClick={() => {
+                  setContainer((v) => !v);
+                  setValve(false);
+                  record(container ? 'ย้ายภาชนะออก' : 'วางภาชนะรองใต้ก๊อก');
+                }}
+              >
+                {container ? 'ย้ายภาชนะออก' : '1. วางภาชนะรองใต้ก๊อก'}
+              </button>
+              <button onClick={toggleValve} className={valve ? 'selected' : ''}>
+                {valve ? '3. ปิดก๊อกให้สนิท' : '2. เปิดก๊อกระบาย'}
+              </button>
+              <button onClick={doWipeSpout} className={wipe ? 'selected' : ''}>
+                4. เช็ดปลายก๊อกด้วยสำลีชุบแอลกอฮอล์
+              </button>
+              <button onClick={doStowSpout} className={stowed ? 'selected' : ''}>
+                5. เก็บปลายก๊อกเข้าที่
+              </button>
+              <button
+                onClick={() => {
+                  setFill(0.8);
+                  setValve(false);
+                  setWipe(false);
+                  setStowed(false);
+                  record('เริ่มจำลองการเทใหม่');
+                }}
+              >
+                เริ่มเทใหม่
+              </button>
+            </div>
+            <p>
+              ปัสสาวะจำลองคงเหลือ: {Math.round(fill * 100)}% · สถานะก๊อก: {valve ? 'เปิดอยู่' : 'ปิดสนิท'}
+              {wipe ? ' · เช็ดแอลกอฮอล์แล้ว' : ''}
+              {stowed ? ' · เก็บปลายก๊อกเรียบร้อย' : ''}
+            </p>
+          </>
+        )}
+
+        {topic === 'secure' && (
+          <>
+            <div className="control-row">
+              <button className={tape === 1 ? 'selected' : ''} onClick={() => chooseTape(1)}>
+                แปะเทปที่หน้าขาขวา
+              </button>
+              <button className={tape === 2 ? 'selected' : ''} onClick={() => chooseTape(2)}>
+                แปะเทปที่หน้าขาซ้าย
+              </button>
+              <button
+                className={slackTight ? 'selected' : ''}
+                onClick={() => {
+                  setSlackTight((s) => !s);
+                  record(slackTight ? 'จัดสายหย่อนพอดี ไม่ตึงรั้ง' : 'จำลองสายตึงรั้งเกินไป');
+                }}
+              >
+                {slackTight ? 'สายตึงรั้งเกินไป (กดเพื่อคลาย)' : 'สายหย่อนพอดี ไม่ดึงรั้ง'}
+              </button>
+              <button
+                onClick={() => {
+                  setTape(0);
+                  record('นำเทปออกเพื่อจัดใหม่');
+                }}
+              >
+                ลอกเทปจัดใหม่
+              </button>
+            </div>
+            {hint && (
+              <p>
+                {tape === 0
+                  ? 'แตะหน้าขาฝั่งใดฝั่งหนึ่งเพื่อติดเทปยึดสาย'
+                  : slackTight
+                  ? 'ข้อควรระวัง: อย่าดึงสายตึงรั้งจนเกินไป เพราะจะดึงรั้งกระเพาะปัสสาวะและทำให้เจ็บ'
+                  : 'ตำแหน่งเหมาะสม: แปะเทปที่หน้าขา ปล่อยระยะหย่อนพอดี มีระยะเผื่อขยับตัวได้'}
+              </p>
+            )}
+          </>
+        )}
+
+        {topic === 'tube' && (
+          <div className="control-row">
+            <button
+              onClick={() => {
+                setStraight((s) => !s);
+                record(straight ? 'จำลองสถานการณ์สายพับงอ' : 'คลายสายพับงอโดยไม่ดึงสาย');
+              }}
+            >
+              {straight ? 'จำลองสายพับงอ' : 'คลายสายพับงอให้ไหลสะดวก'}
+            </button>
+          </div>
+        )}
+
+        {topic === 'trouble' && (
+          <>
+            <div className="control-row">
+              <button
+                className={!straight || troubleDemo === 'kink' ? 'selected' : ''}
+                onClick={() => {
+                  setTroubleDemo('kink');
+                  setStraight(false);
+                  record('แสดงภาพสาธิต: สายสวนพับงอ ปัสสาวะไม่ไหลลงถุง');
+                }}
+              >
+                1. สายพับงอ (ไม่ไหล)
+              </button>
+              <button
+                className={troubleDemo === 'belly' ? 'selected' : ''}
+                onClick={() => {
+                  setTroubleDemo('belly');
+                  setStraight(true);
+                  record('แสดงภาพสาธิต: ปวดตึงท้องน้อย (กระเพาะปัสสาวะคั่ง)');
+                }}
+              >
+                2. ปวดท้องน้อย
+              </button>
+              <button
+                className={troubleDemo === 'leak' ? 'selected' : ''}
+                onClick={() => {
+                  setTroubleDemo('leak');
+                  setStraight(true);
+                  record('แสดงภาพสาธิต: ปัสสาวะรั่วซึมรอบสายสวน');
+                }}
+              >
+                3. ปัสสาวะรั่วซึม
+              </button>
+              <button
+                className={troubleDemo === 'flank' ? 'selected' : ''}
+                onClick={() => {
+                  setTroubleDemo('flank');
+                  setStraight(true);
+                  record('แสดงภาพสาธิต: ปวดเอว / ปวดสีข้างและหลัง');
+                }}
+              >
+                4. ปวดเอว
+              </button>
+              <button
+                className={troubleDemo === 'blood' ? 'selected' : ''}
+                onClick={() => {
+                  setTroubleDemo('blood');
+                  setStraight(true);
+                  record('แสดงภาพสาธิต: ปัสสาวะปนเลือดเป็นสีแดงสด');
+                }}
+              >
+                5. ปัสสาวะปนเลือดสีแดง
+              </button>
+              <button
+                className={troubleDemo === 'fever' ? 'selected' : ''}
+                onClick={() => {
+                  setTroubleDemo('fever');
+                  setStraight(true);
+                  record('แสดงภาพสาธิต: มีไข้สูง ปรอทวัดไข้ 38 °C');
+                }}
+              >
+                6. มีไข้ (ปรอท 38 °C)
+              </button>
+            </div>
+            {hint && (
+              <p className="text-danger">
+                กดปุ่มด้านบนเพื่อดูภาพสาธิตอาการผิดปกติแต่ละแบบ: สายพับงอ · ปวดท้องน้อย · ปัสสาวะรั่วซึม · ปวดเอว · ปัสสาวะปนเลือดสีแดง · มีไข้สูง 38 องศา
+              </p>
+            )}
+          </>
+        )}
+
+        {topic === 'change' && (
+          <>
+            <div className="control-row">
+              <button
+                className={junctionFolded ? 'selected' : ''}
+                onClick={() => {
+                  setJunctionFolded((f) => !f);
+                  record(junctionFolded ? 'คลายสายสวนปัสสาวะที่พับไว้' : '1. พับสายสวนปัสสาวะเหนือข้อต่อไว้ชั่วคราว');
+                }}
+              >
+                {junctionFolded ? 'คลายสายสวนที่พับไว้' : '1. พับสายสวนเหนือข้อต่อ'}
+              </button>
+              <button
+                className={junctionWiped ? 'selected' : ''}
+                onClick={() => {
+                  setJunctionWiped(true);
+                  record('2. เช็ดรอบข้อต่อที่ต่อจากสายสวนปัสสาวะด้วยสำลีชุบแอลกอฮอล์');
+                }}
+              >
+                2. เช็ดข้อต่อสายสวนด้วยแอลกอฮอล์
+              </button>
+              <button
+                className={!connected ? 'selected' : ''}
+                onClick={() => {
+                  setConnected(false);
+                  record('3. ปลดถุงปัสสาวะใบเดิมออกจากข้อต่อสายสวนปัสสาวะ');
+                }}
+              >
+                3. ปลดถุงเดิมที่ข้อต่อสายสวน
+              </button>
+              <button
+                className={connected && junctionWiped ? 'selected' : ''}
+                onClick={() => {
+                  setJunctionWiped(true);
+                  setConnected(true);
+                  setJunctionFolded(false);
+                  record('4. สวมหัวต่อถุงใหม่เข้ากับข้อต่อสายสวนให้แน่นสนิท (ไม่แตะด้านในข้อต่อ)');
+                }}
+              >
+                4. สวมหัวต่อถุงใหม่เข้ากับข้อต่อสายสวน
+              </button>
+            </div>
+            <p>
+              ตำแหน่งข้อต่อสายสวน: {junctionWiped ? 'เช็ดแอลกอฮอล์รอบข้อต่อแล้ว · ' : 'ต้องเช็ดแอลกอฮอล์ก่อนปลดข้อต่อ · '}
+              สถานะ: {connected ? 'สวมต่อถุงใหม่ที่ข้อต่อสายสวนแน่นสนิท' : 'ปลดถุงเดิมออกจากข้อต่อสายสวนแล้ว'}
+            </p>
+          </>
+        )}
+
+        {topic === 'hygiene' && (
+          <>
+            <div className="control-row">
+              <button
+                className={sex === 'female' ? 'selected' : ''}
+                onClick={() => {
+                  setSex('female');
+                  setWipe(true);
+                  setPhase(0);
+                  record('เลือกหุ่นจำลองผู้หญิง');
+                }}
+              >
+                หุ่นจำลองผู้หญิง
+              </button>
+              <button
+                className={sex === 'male' ? 'selected' : ''}
+                onClick={() => {
+                  setSex('male');
+                  setWipe(true);
+                  setPhase(0);
+                  record('เลือกหุ่นจำลองผู้ชาย');
+                }}
+              >
+                หุ่นจำลองผู้ชาย
+              </button>
+            </div>
+            <div className="control-row">
+              <button
+                className={wipe && phase === 0 ? 'selected' : ''}
+                onClick={() => {
+                  setPhase(0);
+                  setWipe(true);
+                  record('ฟอกทำความสะอาดด้วยสบู่อ่อน');
+                }}
+              >
+                1. ล้างด้วยสบู่อ่อน (เกิดฟองสบู่)
+              </button>
+              <button
+                className={wipe && phase === 1 ? 'selected' : ''}
+                onClick={() => {
+                  setPhase(1);
+                  setWipe(true);
+                  record('ราดน้ำสะอาดล้างฟองสบู่ออก');
+                }}
+              >
+                2. ราดน้ำสะอาด (ล้างสบู่ไหลออก)
+              </button>
+              <button
+                className={wipe && phase === 2 ? 'selected' : ''}
+                onClick={() => {
+                  setPhase(2);
+                  setWipe(true);
+                  record('ซับให้แห้งด้วยผ้าสะอาด');
+                }}
+              >
+                3. ซับให้แห้งด้วยผ้าสะอาด
+              </button>
+              {sex === 'male' && (
+                <button
+                  className={phase === 3 ? 'selected' : ''}
+                  onClick={() => {
+                    setPhase(3);
+                    record('รูดหนังหุ้มปลายกลับทันที');
+                  }}
+                >
+                  4. รูดหนังหุ้มปลายกลับทันที
+                </button>
+              )}
+            </div>
+            {hint && (
+              <p>
+                {sex === 'female'
+                  ? 'ผู้หญิง: ใช้สบู่อ่อนล้างและเช็ดจากด้านหน้าไปด้านหลัง ราดน้ำให้ฟองสบู่ไหลออก แล้วซับให้แห้ง'
+                  : 'ผู้ชาย: รูดหนังหุ้มปลายเท่าที่ทำได้โดยไม่ฝืน ล้างด้วยสบู่อ่อน ราดน้ำสะอาด แล้วรูดหนังหุ้มปลายกลับทันที'}
+              </p>
+            )}
+          </>
+        )}
+
+        {feedback && (
+          <p className="scene-feedback" role="status">
+            {hint ? feedback : 'บันทึกการปฏิบัติแล้ว'}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
