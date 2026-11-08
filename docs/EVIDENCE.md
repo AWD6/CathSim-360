@@ -30,3 +30,10 @@
 2. การทำครบหรือคะแนนเต็มในเว็บเป็นผลการเรียนรู้ในซอฟต์แวร์ ไม่ใช่ proof of competence ต้องมี return demonstration ที่พยาบาลสังเกตจริงและบันทึกแยก
 3. ผลลัพธ์คลินิก: CAUTI/1,000 catheter-days ต้องมีผู้ยืนยันการวินิจฉัยและจำนวนวันคาสายครบ ไม่ใช้คะแนนเว็บหรือปัสสาวะขุ่นแทนการวินิจฉัย
 4. การประเมินประสิทธิผลนวัตกรรมควรมี baseline/หลังเรียน/ติดตาม เกณฑ์และเครื่องมือที่ตรวจคุณภาพแล้ว กลุ่มเปรียบเทียบเมื่อทำได้ และการพิจารณาจริยธรรมตามรูปแบบโครงการ ยังไม่มีข้อมูลรองรับคำกล่าวว่า CathSim ลดการติดเชื้อหรือยืนยันว่าใช้เองได้จริง
+
+
+## การสาธิตแบบทำไปพร้อมกัน v0.3
+
+เพิ่ม 10 หัวข้อ 36 ขั้นตอนพร้อมเสียงไทยผู้หญิง และภาพจำลองอุปกรณ์ ใช้ข้อมูลเพิ่มเติมจาก [NHS England catheter passport 2023](https://www.england.nhs.uk/wp-content/uploads/2023/11/Catheter-passport-v8-complete-patient-and-clinical-Nov-2023.pdf), [Queensland Health](https://www.health.qld.gov.au/clinical-practice/guidelines-procedures/clinical-pathways/residential-aged-care-clinical-pathways/all-pathways/urinary-catheter-insertion-or-change) และ [UKHSA 2026](https://www.gov.uk/government/publications/infection-prevention-and-control-ipc-in-adult-social-care-asc/essential-ipc-considerations-for-clinical-interventions-and-procedures-in-adult-social-care) สำหรับการยึดสาย การเปลี่ยนถุง และการเช็ดปลายก๊อก
+
+รายงาน StepEvents บันทึกผู้ใช้กดทำแล้ว (confirmed) กับดูผ่านอัตโนมัติ (auto) แยกกัน ไม่ใช้คะแนน Quiz และไม่ถือการเลื่อนหลังเสียงจบ 8 วินาทีเป็นการปฏิบัติจริงที่ยืนยันโดยเจ้าหน้าที่ การประเมินจากการสาธิตกลับยังบันทึกโดยเจ้าหน้าที่ใน Observations ได้ ข้อมูล Attempts รุ่นก่อนยังเก็บไว้แยก

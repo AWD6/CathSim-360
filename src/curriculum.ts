@@ -6,7 +6,10 @@ export const sources=[
  {name:'Schumacher et al. — Self-Care Activities… (ออนไลน์ 2025; ฉบับ 2026)',url:'https://pmc.ncbi.nlm.nih.gov/articles/PMC12810644/',note:'Scoping review 32 เอกสาร ครอบคลุมดูแลประจำ เฝ้าสังเกต และจัดการปัญหา ไม่ได้พิสูจน์ประสิทธิผลแอปนี้'},
  {name:'CATHETER II — randomized controlled trial (2024)',url:'https://pubmed.ncbi.nlm.nih.gov/39622574/',note:'ศึกษาการล้างสายระยะยาว 80 คน การศึกษาขนาดเล็ก ไม่ใช่เหตุผลให้ผู้ป่วยล้างสายเอง'},
  {name:'NHS Frimley 2024 — Catheter care',url:'https://www.fhft.nhs.uk/patients-and-visitors/patient-information-library/inpatient-catheter-care',note:'ตัวอย่างปริมาณน้ำ 1.5–2 ลิตร เว้นแต่ทีมรักษากำหนดต่างไป แสดงว่าปริมาณน้ำต้องปรับรายบุคคล'},
- {name:'Alex et al. — Spaced eLearning for nurses (2025)',url:'https://researchers.westernsydney.edu.au/en/publications/development-and-evaluation-of-a-spaced-elearning-intervention-for/',note:'ร่วมออกแบบการเรียนรู้แบบเว้นระยะสำหรับพยาบาล ใช้เป็นแนวคิดทบทวนซ้ำ ไม่ใช่หลักฐานประสิทธิผลในผู้ป่วยที่บ้านโดยตรง'}
+ {name:'Alex et al. — Spaced eLearning for nurses (2025)',url:'https://researchers.westernsydney.edu.au/en/publications/development-and-evaluation-of-a-spaced-elearning-intervention-for/',note:'ร่วมออกแบบการเรียนรู้แบบเว้นระยะสำหรับพยาบาล ใช้เป็นแนวคิดทบทวนซ้ำ ไม่ใช่หลักฐานประสิทธิผลในผู้ป่วยที่บ้านโดยตรง'},
+ {name:'Queensland Health — การยึดสายและระบบถุง',url:'https://www.health.qld.gov.au/clinical-practice/guidelines-procedures/clinical-pathways/residential-aged-care-clinical-pathways/all-pathways/urinary-catheter-insertion-or-change',note:'ยึดสายป้องกันดึงรั้ง ถุงตามชนิดและคำแนะนำผู้ผลิต'},
+ {name:'UKHSA — IPC in adult social care (2026)',url:'https://www.gov.uk/government/publications/infection-prevention-and-control-ipc-in-adult-social-care-asc/essential-ipc-considerations-for-clinical-interventions-and-procedures-in-adult-social-care',note:'การเทและเช็ดปลายก๊อกด้วยกระดาษสะอาด โดยไม่สัมผัสภาชนะ'},
+ {name:'NHS England — Catheter passport (2023)',url:'https://www.england.nhs.uk/wp-content/uploads/2023/11/Catheter-passport-v8-complete-patient-and-clinical-Nov-2023.pdf',note:'การดูแลและเปลี่ยนถุง ใช้วิธีของอุปกรณ์และการสอนจากทีมรักษา'}
 ];
 export type Lesson={id:string;title:string;why:string;steps:string[];question:string;choices:string[];answer:number;source:number[]};
 export const lessons:Lesson[]=[

@@ -1,7 +1,7 @@
 // Bind this project to the private CathSim workbook. No access keys belong in GitHub.
 function setup() {
   const ss=SpreadsheetApp.getActiveSpreadsheet();
-  const headers={Accounts:['code','role','allowed_codes','secret_hash','enabled'],Attempts:['id','participant_code','lesson','correct','seconds','mode','timestamp'],Observations:['participant_code','lesson','observed_at','assessor_code','result','catheter_days','confirmed_cauti']};
+  const headers={Accounts:['code','role','allowed_codes','secret_hash','enabled'],Attempts:['id','participant_code','lesson','correct','seconds','mode','timestamp'],StepEvents:['id','participant_code','topic','step_index','trigger','seconds','timestamp'],Observations:['participant_code','lesson','observed_at','assessor_code','result','catheter_days','confirmed_cauti']};
   Object.keys(headers).forEach(name=>{const s=ss.getSheetByName(name)||ss.insertSheet(name);if(!s.getLastRow())s.appendRow(headers[name]);s.setFrozenRows(1);});
   PropertiesService.getScriptProperties().setProperty('SHEET_ID',ss.getId());
 }
@@ -17,6 +17,7 @@ function book_(){return SpreadsheetApp.openById(PropertiesService.getScriptPrope
 function rows_(name){return book_().getSheetByName(name).getDataRange().getValues().slice(1);}
 function account_(code){const a=rows_('Accounts').find(r=>r[0]===code&&r[4]===true);if(!a)throw Error('Access denied');return {code:a[0],role:a[1],allowed:String(a[2]).split(','),hash:a[3]};}
 function reports_(a){return rows_('Attempts').filter(r=>a.allowed.includes(r[1])).slice(-500).map(r=>({id:r[0],code:r[1],lesson:r[2],correct:r[3]===true,seconds:r[4],mode:r[5],time:r[6]}));}
+function events_(a){const s=book_().getSheetByName('StepEvents');if(!s)return [];return s.getDataRange().getValues().slice(1).filter(r=>a.allowed.includes(r[1])).slice(-1000).map(r=>({id:r[0],code:r[1],topic:r[2],step:r[3],trigger:r[4],seconds:r[5],time:r[6]}));}
 function doPost(e){
   try{
     if(!e.postData||e.postData.contents.length>6000)throw Error('Invalid request');
@@ -29,7 +30,15 @@ function doPost(e){
       return out_({ok:true,token:token,role:a.role,attempts:a.role==='caregiver'?reports_(a):[]});
     }
     if(typeof b.token!=='string'||b.token.length>100)throw Error('Session expired');const code=cache.get('session:'+digest_(b.token));if(!code)throw Error('Session expired');a=account_(code);
-    if(b.action==='report')return out_({ok:true,attempts:reports_(a)});
+    if(b.action==='report')return out_({ok:true,attempts:reports_(a),events:events_(a)});
+    if(b.action==='progress'){
+      if(a.role!=='patient')throw Error('Access denied');
+      const t=b.event,limits={hands:3,position:4,tube:3,secure:3,drain:5,change:5,hygiene:5,water:3,followup:2,trouble:3};
+      if(!t||!/^[a-f0-9-]{36}$/.test(t.id)||!Object.prototype.hasOwnProperty.call(limits,t.topic)||!Number.isInteger(t.step)||t.step<0||t.step>=limits[t.topic]||!['confirmed','auto'].includes(t.trigger)||!Number.isFinite(t.seconds)||t.seconds<0||t.seconds>86400)throw Error('Invalid progress');
+      const lock=LockService.getScriptLock();lock.waitLock(10000);
+      try{let s=book_().getSheetByName('StepEvents');if(!s){s=book_().insertSheet('StepEvents');s.appendRow(['id','participant_code','topic','step_index','trigger','seconds','timestamp']);s.setFrozenRows(1);}if(!s.getDataRange().getValues().slice(1).some(r=>r[0]===t.id))s.appendRow([t.id,a.code,t.topic,t.step,t.trigger,t.seconds,new Date().toISOString()]);}finally{lock.releaseLock();}
+      return out_({ok:true});
+    }
     if(b.action!=='record'||a.role!=='patient')throw Error('Access denied');
     const t=b.attempt,ids=['hands','position','drain','hygiene','water','followup','trouble'];
     if(!t||!/^[a-f0-9-]{36}$/.test(t.id)||!ids.includes(t.lesson)||typeof t.correct!=='boolean'||!Number.isFinite(t.seconds)||t.seconds<0||t.seconds>86400||!['learn','practice','challenge'].includes(t.mode))throw Error('Invalid attempt');
