@@ -30,7 +30,7 @@ function doPost(e){
       return out_({ok:true,token:token,role:a.role,attempts:a.role==='caregiver'?reports_(a):[]});
     }
     if(typeof b.token!=='string'||b.token.length>100)throw Error('Session expired');const code=cache.get('session:'+digest_(b.token));if(!code)throw Error('Session expired');a=account_(code);
-    if(b.action==='report')return out_({ok:true,attempts:reports_(a),events:events_(a)});
+    if(b.action==='report'){if(a.role!=='caregiver')throw Error('Access denied');return out_({ok:true,attempts:reports_(a),events:events_(a)});}
     if(b.action==='progress'){
       if(a.role!=='patient')throw Error('Access denied');
       const t=b.event,limits={hands:3,position:4,tube:3,secure:3,drain:5,change:5,hygiene:5,water:3,followup:2,trouble:3};
