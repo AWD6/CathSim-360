@@ -411,27 +411,34 @@
 }
 
 .challenge-buttons {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
-  flex-wrap: wrap;
+}
+
+.challenge-buttons .done-button,
+.challenge-buttons button:only-child {
+  grid-column: 1 / -1;
 }
 
 .challenge-buttons .done-button {
-  flex: 2;
-  min-width: 220px;
-  padding: 14px 20px;
-  font-size: 17px;
+  width: 100%;
+  min-height: 56px;
+  padding: 15px 20px;
+  font-size: 18px;
   font-weight: 800;
-  background: #0d9488;
+  background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
   color: #ffffff;
-  border-radius: 12px;
-  border: none;
+  border-radius: 14px;
+  border: 1.5px solid #14b8a6;
+  box-shadow: 0 6px 18px rgba(13, 148, 136, 0.3);
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .challenge-buttons button:not(.done-button) {
-  flex: 1;
-  min-width: 140px;
+  width: 100%;
+  min-height: 46px;
   padding: 12px 16px;
   font-size: 14px;
   font-weight: 600;
@@ -440,6 +447,7 @@
   background: #ffffff;
   color: #1e293b;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .mode-hint-box {
@@ -773,33 +781,47 @@
 }
 
 .step-actions {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
-  flex-wrap: wrap;
   margin: 20px 0;
+}
+
+.step-actions .done-button,
+.step-actions button:only-child {
+  grid-column: 1 / -1;
 }
 
 .step-actions .done-button {
   width: 100%;
-  padding: 16px;
+  min-height: 58px;
+  padding: 16px 20px;
   font-size: 19px;
   font-weight: 800;
-  background: #0d9488;
+  letter-spacing: 0.2px;
+  background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
   color: #ffffff;
-  border-radius: 14px;
-  border: none;
+  border-radius: 16px;
+  border: 1.5px solid #14b8a6;
   cursor: pointer;
-  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.3);
-  transition: all 0.2s;
+  box-shadow: 0 6px 18px rgba(13, 148, 136, 0.32);
+  transition: transform 0.15s ease, box-shadow 0.2s ease, background 0.2s ease;
+  touch-action: manipulation;
 }
 
 .step-actions .done-button:hover {
-  background: #0f766e;
+  background: linear-gradient(135deg, #0f766e 0%, #115e59 100%);
   transform: translateY(-1px);
+  box-shadow: 0 8px 22px rgba(13, 148, 136, 0.38);
+}
+
+.step-actions .done-button:active {
+  transform: scale(0.985);
 }
 
 .step-actions button:not(.done-button) {
-  flex: 1;
+  width: 100%;
+  min-height: 48px;
   font-size: 15px;
   font-weight: 600;
   padding: 12px 16px;
@@ -808,6 +830,7 @@
   background: #ffffff;
   color: #1e293b;
   cursor: pointer;
+  touch-action: manipulation;
 }
 
 .hands-free {
@@ -1095,50 +1118,745 @@
   color: #64748b;
 }
 
-/* Responsive Styles */
+/* Responsive Styles (Mobile-First Symmetrical Portrait & Landscape) */
 @media (max-width: 950px) {
   .welcome-stage {
-    grid-template-columns: 240px 1fr;
-    padding: 24px 24px 0;
+    grid-template-columns: 220px 1fr;
+    padding: 22px 24px 0;
     gap: 20px;
   }
   .welcome-copy h1 {
-    font-size: 30px;
+    font-size: 28px;
   }
   .demo-layout {
     grid-template-columns: 1fr;
+    gap: 18px;
   }
   .guided-stage {
-    height: 420px;
+    height: 360px;
   }
 }
 
-@media (max-width: 600px) {
-  .portal-header {
-    flex-direction: column;
-    align-items: flex-start;
+@media (max-width: 768px) {
+  .guided-app .portal-main {
+    padding: 12px 12px 148px;
   }
-  .welcome-stage {
+
+  /* Symmetrical Header */
+  .guided-app .portal-header {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  .guided-app .brand-link {
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    width: 100%;
+    text-align: left;
+  }
+
+  .guided-app .app-logo-svg {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+  }
+
+  .guided-app .brand-text b {
+    font-size: 16.5px;
+    line-height: 1.2;
+  }
+
+  .guided-app .brand-dash {
+    font-size: 13.5px;
+  }
+
+  .guided-app .brand-sub {
+    font-size: 10.5px;
+    letter-spacing: -0.15px;
+    margin-top: 2px;
+    line-height: 1.3;
+  }
+
+  .guided-app .header-meta {
+    width: 100%;
     display: flex;
-    flex-direction: column-reverse;
-    padding: 20px 16px 0;
+    justify-content: center;
+  }
+
+  .guided-app .header-meta .credit {
+    width: 100%;
+    max-width: 100%;
+    text-align: center;
+    font-size: 10px;
+    padding: 4px 10px;
+    white-space: normal;
+    line-height: 1.3;
+    box-sizing: border-box;
+  }
+
+  /* Symmetrical 3-Button Main Navigation */
+  .guided-app .portal-nav {
+    display: grid;
+    grid-template-columns: 1.12fr 1.35fr 0.78fr;
+    gap: 5px;
+    padding: 6px 10px;
+    overflow-x: visible;
+  }
+
+  .guided-app .nav-left-group,
+  .guided-app .nav-right-group {
+    display: contents;
+  }
+
+  .guided-app .portal-nav button {
+    width: 100%;
+    min-height: 36px !important;
+    padding: 5px 4px !important;
+    font-size: 10.5px !important;
+    letter-spacing: -0.2px;
+    line-height: 1.2 !important;
+    text-align: center;
+    white-space: nowrap !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 10px;
+  }
+
+  /* Symmetrical Experience & Mode Switch Bar */
+  .guided-app .experience-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 5px;
+    margin-bottom: 8px;
+  }
+
+  .guided-app .mode-switch {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 4px;
+    width: 100%;
+    padding: 4px;
+    box-sizing: border-box;
+  }
+
+  .guided-app .mode-switch button {
+    width: 100%;
+    min-height: 34px !important;
+    padding: 5px 3px !important;
+    font-size: 10.5px !important;
+    letter-spacing: -0.2px;
+    line-height: 1.2 !important;
+    text-align: center;
+    white-space: nowrap !important;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9px;
+  }
+
+  .guided-app .mode-description-badge {
+    width: 100%;
+    box-sizing: border-box;
+    text-align: center;
+    font-size: 11px;
+    line-height: 1.35;
+    padding: 5px 10px;
+  }
+
+  /* Symmetrical Welcome Hero on Mobile */
+  .guided-app .welcome-stage {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 18px 16px 20px;
+    gap: 10px;
+    border-radius: 22px;
+    margin-bottom: 18px;
+  }
+
+  .guided-app .cath-portrait {
+    max-width: 150px;
+    align-self: center;
+    margin: 0 auto;
+  }
+
+  .guided-app .welcome-copy {
+    padding: 0;
+    width: 100%;
+    text-align: center;
+  }
+
+  .guided-app .gentle-label {
+    display: block;
+    font-size: 11.5px;
+    line-height: 1.4;
+  }
+
+  .guided-app .welcome-copy h1 {
+    font-size: 23px;
+    line-height: 1.35;
+    margin: 8px 0 10px;
+  }
+
+  .guided-app .welcome-copy p {
+    font-size: 14.5px;
+    line-height: 1.65;
+    margin: 0 auto;
+  }
+
+  .guided-app .welcome-start {
+    width: 100%;
+    min-height: 50px !important;
+    padding: 13px 18px !important;
+    font-size: 16px !important;
+    border-radius: 14px;
+    margin: 14px 0 6px;
+  }
+
+  /* Topic Heading & Symmetrical Cards */
+  .guided-app .learning-heading {
+    text-align: center;
+    margin: 18px 0 12px;
+  }
+
+  .guided-app .learning-heading h2 {
+    font-size: 19px;
+    line-height: 1.4;
+  }
+
+  .guided-app .learning-heading p {
+    font-size: 13px;
+  }
+
+  .guided-app .lesson-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .guided-app .lesson-card {
+    padding: 16px 18px;
+    border-radius: 16px;
+  }
+
+  .guided-app .lesson-card strong {
+    font-size: 18px;
+    margin-bottom: 6px;
+  }
+
+  .guided-app .lesson-card p {
+    font-size: 13.5px;
+    margin-bottom: 10px;
+  }
+
+  /* Lesson Top Header Bar */
+  .guided-app .lesson-top {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 12px;
+    margin-bottom: 10px;
+    border-radius: 14px;
+    flex-wrap: nowrap;
+  }
+
+  .guided-app .back-topic-btn {
+    padding: 6px 11px !important;
+    min-height: 34px !important;
+    font-size: 12px !important;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .guided-app .lesson-top-title {
+    justify-content: flex-end;
+    gap: 6px;
+    min-width: 0;
+    flex-wrap: nowrap;
+  }
+
+  .guided-app .lesson-top-title strong {
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .guided-app .lesson-step-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  /* Proportional 3D Stage on Mobile */
+  .guided-app .demo-layout {
+    gap: 12px;
+  }
+
+  .guided-app .demonstration {
+    border-radius: 18px;
+  }
+
+  .guided-app .guided-stage,
+  .guided-app .demo-layout.challenge-mode .guided-stage {
+    height: 205px;
+  }
+
+  .guided-app .stage-corner {
+    top: 8px;
+    left: 8px;
+    font-size: 10px;
+    padding: 3px 9px;
+  }
+
+  .guided-app .demo-nurse {
+    top: 6px;
+    right: 6px;
+    width: auto;
+    max-width: 118px;
+  }
+
+  .guided-app .demo-nurse .nurse-cath {
+    width: 52px;
+  }
+
+  .guided-app .demo-nurse span {
+    font-size: 9px;
+    padding: 2px 7px;
+    margin-top: 2px;
+  }
+
+  .guided-app .bag-waist-badge {
+    top: auto;
+    bottom: 8px;
+    left: 8px;
+    right: 8px;
+    padding: 6px 10px;
+    font-size: 11px;
+    text-align: center;
+    line-height: 1.3;
+  }
+
+  .guided-app .lab-controls {
+    padding: 8px 10px;
+  }
+
+  .guided-app .lab-controls p {
+    font-size: 12px;
+    margin: 6px 0 2px;
+    text-align: center;
+  }
+
+  .guided-app .camera-help {
+    gap: 6px;
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+  }
+
+  .guided-app .camera-help span {
+    font-size: 10.5px;
+    flex: 1;
+    min-width: 150px;
+    line-height: 1.3;
+  }
+
+  .guided-app .camera-help button {
+    font-size: 11px !important;
+    padding: 4px 9px !important;
+    min-height: 28px !important;
+  }
+
+  .guided-app .control-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 5px;
+    margin-top: 4px;
+  }
+
+  .guided-app .control-row button {
+    width: 100%;
+    min-height: 32px !important;
+    font-size: 11px !important;
+    line-height: 1.2 !important;
+    padding: 4px 5px !important;
+    text-align: center;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+    background: #ffffff;
+    color: #1e293b;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+  }
+
+  .guided-app .control-row button.selected,
+  .guided-app .control-row button.portal-primary {
+    background: #0d9488 !important;
+    color: #ffffff !important;
+    border-color: #0d9488 !important;
+  }
+
+  .guided-app .control-row button:only-child,
+  .guided-app .control-row button:nth-child(odd):last-child {
+    grid-column: 1 / -1;
+  }
+
+  /* Spoken Step Card & Fixed Thumb-Friendly Bottom Action Dock on Mobile Portrait */
+  .guided-app .spoken-step {
+    background: #ffffff;
+    border: 1px solid #dcebe5;
+    border-radius: 18px;
+    padding: 14px 14px 12px;
+    box-shadow: 0 4px 14px rgba(13, 148, 136, 0.05);
+  }
+
+  .guided-app .spoken-step .gentle-label {
+    text-align: center;
+  }
+
+  .guided-app .spoken-step h1 {
+    font-size: 18.5px;
+    line-height: 1.35;
+    margin: 4px 0 8px;
+    text-align: center;
+  }
+
+  .guided-app .nurse-script {
+    font-size: 14.5px;
+    line-height: 1.65;
+    padding: 12px 14px;
+    margin: 6px 0 12px;
+    background: #f8faf9;
+    border-radius: 14px;
+    text-align: left;
+  }
+
+  .guided-app .step-actions {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 60;
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(12px);
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+    margin: 0;
+    border-radius: 20px 20px 0 0;
+    border-top: 1.5px solid #99f6e4;
+    box-shadow: 0 -6px 24px rgba(13, 148, 136, 0.16);
+    gap: 8px;
+  }
+
+  .guided-app .step-actions .done-button {
+    min-height: 52px !important;
+    font-size: 17.5px !important;
+    padding: 12px 16px !important;
+    border-radius: 14px !important;
+  }
+
+  .guided-app .step-actions button:not(.done-button) {
+    min-height: 40px !important;
+    font-size: 13.5px !important;
+    padding: 8px 12px !important;
+    border-radius: 10px !important;
+  }
+
+  .guided-app .challenge-action-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    z-index: 60;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+    background: rgba(255, 255, 255, 0.98);
+    backdrop-filter: blur(12px);
+    border-radius: 20px 20px 0 0;
+    border-top: 1.5px solid #99f6e4;
+    box-shadow: 0 -6px 24px rgba(13, 148, 136, 0.16);
+  }
+
+  .guided-app .challenge-status-text {
+    justify-content: center;
+    text-align: center;
+    font-size: 13px;
+  }
+
+  .guided-app .mode-hint-box,
+  .guided-app .countdown {
+    font-size: 12.5px;
+    padding: 10px 12px;
+    text-align: center;
+  }
+
+  /* Symmetrical Step Dots on Mobile */
+  .guided-app .step-dots {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(46px, 1fr));
+    gap: 8px;
+    margin: 14px 0 8px;
+  }
+
+  .guided-app .step-dots button {
+    width: 100%;
+    min-height: 40px !important;
+    padding: 6px !important;
+    justify-content: center;
+    text-align: center;
+    font-size: 14px !important;
+    font-weight: 700;
+  }
+
+  .guided-app .step-dots button span {
+    display: none;
+  }
+
+  /* Symmetrical Forms & Report on Mobile */
+  .guided-app .login-buttons,
+  .guided-app .report-actions-bar {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 10px;
   }
-  .cath-portrait {
-    max-width: 200px;
-    align-self: center;
+
+  .guided-app .login-buttons button:only-child,
+  .guided-app .report-actions-bar button:only-child,
+  .guided-app .report-actions-bar button:nth-child(odd):last-child {
+    grid-column: 1 / -1;
   }
-  .welcome-copy h1 {
-    font-size: 26px;
+
+  .guided-app .stat-row {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
   }
-  .welcome-copy p {
+
+  .guided-app .stat-row > div {
+    min-width: 0;
+    text-align: center;
+    padding: 14px 10px;
+  }
+}
+
+/* Mobile Landscape Orientation (Side-by-Side Symmetrical Layout) */
+@media (max-width: 960px) and (orientation: landscape) and (max-height: 560px) {
+  .guided-app .portal-main {
+    padding: 8px 14px 20px;
+  }
+
+  .guided-app .portal-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 14px;
+    gap: 12px;
+  }
+
+  .guided-app .brand-link {
+    width: auto;
+    justify-content: flex-start;
+  }
+
+  .guided-app .app-logo-svg {
+    width: 34px;
+    height: 34px;
+  }
+
+  .guided-app .brand-text b {
     font-size: 15px;
   }
-  .guided-stage {
-    height: 380px;
+
+  .guided-app .header-meta {
+    width: auto;
   }
-  .camera-nav-bar button {
+
+  .guided-app .header-meta .credit {
+    width: auto;
+    white-space: nowrap;
     font-size: 10px;
-    padding: 4px 7px;
+    padding: 4px 10px;
+  }
+
+  .guided-app .portal-nav {
+    display: grid;
+    grid-template-columns: 1.2fr 1.2fr 0.85fr;
+    gap: 8px;
+    padding: 5px 14px;
+  }
+
+  .guided-app .nav-left-group,
+  .guided-app .nav-right-group {
+    display: contents;
+  }
+
+  .guided-app .portal-nav button {
+    min-height: 32px !important;
+    padding: 4px 10px !important;
+    font-size: 11.5px !important;
+  }
+
+  .guided-app .experience-bar {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+    gap: 8px;
+  }
+
+  .guided-app .mode-switch {
+    width: auto;
+    flex: 1;
+    max-width: 430px;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .guided-app .mode-switch button {
+    min-height: 32px !important;
+    padding: 4px 6px !important;
+    font-size: 11px !important;
+  }
+
+  .guided-app .mode-description-badge {
+    width: auto;
+    flex: 1;
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+
+  .guided-app .welcome-stage {
+    display: grid;
+    grid-template-columns: 140px 1fr;
+    align-items: center;
+    text-align: left;
+    padding: 12px 20px;
+    gap: 16px;
+    margin-bottom: 14px;
+  }
+
+  .guided-app .cath-portrait {
+    max-width: 130px;
+  }
+
+  .guided-app .welcome-copy {
+    text-align: left;
+    padding: 0;
+  }
+
+  .guided-app .welcome-copy h1 {
+    font-size: 20px;
+    margin: 4px 0 6px;
+  }
+
+  .guided-app .welcome-copy p {
+    font-size: 13px;
+    line-height: 1.45;
+  }
+
+  .guided-app .welcome-start {
+    width: auto;
+    min-height: 40px !important;
+    padding: 8px 18px !important;
+    font-size: 13.5px !important;
+    margin: 8px 0 4px;
+  }
+
+  .guided-app .lesson-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+  }
+
+  .guided-app .lesson-top {
+    padding: 6px 12px;
+    margin-bottom: 8px;
+  }
+
+  /* Side-by-side 2-column layout in Landscape so 3D and "ทำแล้ว" button sit cleanly side-by-side */
+  .guided-app .demo-layout {
+    display: grid;
+    grid-template-columns: 1.05fr 1fr;
+    gap: 12px;
+    align-items: start;
+  }
+
+  .guided-app .guided-stage {
+    height: 210px;
+  }
+
+  .guided-app .demo-layout.challenge-mode {
+    grid-template-columns: 1fr;
+  }
+
+  .guided-app .demo-layout.challenge-mode .guided-stage {
+    height: 200px;
+  }
+
+  .guided-app .spoken-step {
+    background: #ffffff;
+    border: 1px solid #dcebe5;
+    border-radius: 16px;
+    padding: 12px 14px;
+  }
+
+  .guided-app .spoken-step .gentle-label,
+  .guided-app .spoken-step h1 {
+    text-align: left;
+  }
+
+  .guided-app .spoken-step h1 {
+    font-size: 16px;
+    line-height: 1.3;
+    margin: 3px 0 6px;
+  }
+
+  .guided-app .nurse-script {
+    font-size: 13px;
+    line-height: 1.5;
+    padding: 9px 12px;
+    margin: 6px 0 10px;
+    background: #f8faf9;
+    border-radius: 12px;
+  }
+
+  .guided-app .step-actions {
+    position: static;
+    background: transparent;
+    backdrop-filter: none;
+    box-shadow: none;
+    border: none;
+    border-radius: 0;
+    margin: 8px 0 6px;
+    padding: 0;
+    gap: 8px;
+  }
+
+  .guided-app .step-actions .done-button {
+    min-height: 46px !important;
+    font-size: 15.5px !important;
+    padding: 10px 14px !important;
+    border-radius: 12px !important;
+  }
+
+  .guided-app .step-actions button:not(.done-button) {
+    min-height: 36px !important;
+    font-size: 12.5px !important;
+    padding: 6px 10px !important;
+    border-radius: 10px !important;
+  }
+
+  .guided-app .challenge-action-bar {
+    position: static;
+    border-radius: 0 0 18px 18px;
+    box-shadow: none;
   }
 }
