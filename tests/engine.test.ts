@@ -1,0 +1,10 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {initialState,transition,coverage} from '../src/engine.ts';
+import {clinicalAssessmentEnabled,clinicalSource} from '../src/clinical.ts';
+test('no clinical assessment is enabled without the approved chapter',()=>{assert.equal(clinicalSource.excerpts.length,0);assert.equal(clinicalAssessmentEnabled(),false);});
+test('vertical movement is bounded, finite and available through the shared action API',()=>{let s=initialState();s=transition(s,{type:'height',value:Infinity});assert.equal(s.height,1.05);s=transition(s,{type:'height',value:20});assert.equal(s.height,1.8);s=transition(s,{type:'height',value:-2});assert.equal(s.height,.45);});
+test('drain simulation conserves liquid and stops at zero',()=>{let s={...initialState(),tap:true,container:true};for(let i=0;i<500;i++)s=transition(s,{type:'tick',dt:.1});assert.equal(s.fluid,0);assert.ok(Math.abs(s.collected-.8)<1e-10);assert.equal(s.actions.length,0);});
+test('flow stops with the valve closed, and outside liquid is not counted as collected',()=>{let s=initialState();s=transition(s,{type:'tick',dt:1});assert.equal(s.fluid,.8);s=transition(s,{type:'tap'});s=transition(s,{type:'tick',dt:.1});assert.ok(s.fluid<.8);assert.equal(s.collected,0);});
+test('control coverage is mission-specific, and reset restores initial scene',()=>{let s=transition(initialState(),{type:'select-bag'});s=transition(s,{type:'height',value:.8});assert.equal(coverage(s,'position'),100);assert.equal(coverage(s,'drain'),0);assert.deepEqual(transition(s,{type:'reset'}),initialState());});
+test('invalid simulation tick cannot create or destroy liquid',()=>{for(const dt of [NaN,Infinity,-1,0])assert.deepEqual(transition({...initialState(),tap:true},{type:'tick',dt}),{...initialState(),tap:true});});
