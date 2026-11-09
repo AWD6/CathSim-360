@@ -2857,3 +2857,422 @@
   font-weight: 600;
   outline: none;
 }
+
+/* ==========================================================================
+   CATHREPORT ADMIN DASHBOARD & HAND HYGIENE DEMONSTRATION ENHANCEMENTS
+   ========================================================================== */
+
+/* Admin Dashboard Container */
+.admin-dashboard {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 28px 32px;
+  background: #ffffff;
+  border: 1px solid #dce9e3;
+  border-radius: 24px;
+  box-shadow: 0 4px 24px rgba(13, 148, 136, 0.04);
+}
+
+/* Dashboard Header */
+.admin-dash-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding-bottom: 24px;
+  border-bottom: 1.5px solid #e6f0ec;
+  flex-wrap: wrap;
+}
+
+.admin-dash-title-group h1 {
+  font-size: 28px;
+  font-weight: 800;
+  color: #064e3b;
+  margin: 8px 0 6px;
+  letter-spacing: -0.3px;
+}
+
+.admin-dash-title-group p {
+  font-size: 15px;
+  color: #475569;
+  max-width: 820px;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.admin-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.admin-shield-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #0f766e;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  letter-spacing: 0.3px;
+}
+
+.live-sync-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.admin-logout-btn {
+  background: #f8faf9 !important;
+  color: #b91c1c !important;
+  border: 1px solid #fecaca !important;
+  font-size: 13.5px !important;
+  font-weight: 700 !important;
+  padding: 10px 18px !important;
+  border-radius: 12px !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.admin-logout-btn:hover {
+  background: #fef2f2 !important;
+  border-color: #f87171 !important;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15);
+}
+
+/* 4-Card KPI Overview Grid */
+.admin-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin: 24px 0 28px;
+}
+
+.kpi-card {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 20px;
+  background: #f8faf9;
+  border: 1px solid #e2ebe6;
+  border-radius: 18px;
+  transition: all 0.2s ease;
+}
+
+.kpi-card:hover {
+  border-color: #99f6e4;
+  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.08);
+  transform: translateY(-1px);
+}
+
+.kpi-card.highlight-pass {
+  background: #f0fdf9;
+  border: 1.5px solid #99f6e4;
+}
+
+.kpi-icon {
+  font-size: 32px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 50px;
+  height: 50px;
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  flex-shrink: 0;
+}
+
+.kpi-content {
+  display: flex;
+  flex-direction: column;
+}
+
+.kpi-label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #4b635f;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.kpi-value {
+  font-size: 26px;
+  font-weight: 800;
+  color: #064e3b;
+  line-height: 1.2;
+  margin: 2px 0;
+}
+
+.kpi-value small {
+  font-size: 15px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.kpi-sub {
+  font-size: 12px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* Symmetrical Confidential Identity Linker Card */
+.admin-confidential-link-card {
+  background: linear-gradient(180deg, #ffffff 0%, #f9fcfb 100%);
+  border: 1.5px solid #99f6e4;
+  border-radius: 20px;
+  padding: 24px 28px;
+  margin: 24px 0;
+  box-shadow: 0 4px 18px rgba(13, 148, 136, 0.05);
+}
+
+.confidential-header {
+  margin-bottom: 20px;
+}
+
+.confidential-badge-wrap {
+  margin-bottom: 8px;
+}
+
+.confidential-badge {
+  display: inline-block;
+  background: #e6f7f4;
+  color: #0d9488;
+  border: 1px solid #bbf0e5;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 999px;
+  letter-spacing: 0.2px;
+}
+
+.confidential-header h3 {
+  font-size: 20px;
+  font-weight: 800;
+  color: #064e3b;
+  margin: 6px 0;
+}
+
+.confidential-header p {
+  font-size: 14.5px;
+  color: #475569;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.confidential-form-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.confidential-inputs-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 860px) {
+  .confidential-inputs-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.confidential-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.confidential-field label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.confidential-field .field-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f4039;
+}
+
+.confidential-field .field-hint {
+  font-size: 11.5px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.confidential-field input {
+  width: 100%;
+  padding: 12px 14px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #064e3b;
+  background: #ffffff;
+  border: 1.5px solid #cce5dc;
+  border-radius: 12px;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+}
+
+.confidential-field input:focus {
+  outline: none;
+  border-color: #0d9488;
+  box-shadow: 0 0 0 4px rgba(13, 148, 136, 0.14);
+}
+
+.confidential-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.confidential-submit-btn {
+  background: #0d9488 !important;
+  color: #ffffff !important;
+  border-color: #0d9488 !important;
+  font-weight: 700 !important;
+  font-size: 15px !important;
+  padding: 13px 24px !important;
+  border-radius: 12px !important;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(13, 148, 136, 0.25);
+  transition: all 0.15s ease;
+}
+
+.confidential-submit-btn:hover:not(:disabled) {
+  background: #0f766e !important;
+  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.35);
+  transform: translateY(-1px);
+}
+
+.confidential-linked-pill {
+  font-size: 13px;
+  font-weight: 700;
+  color: #065f46;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  padding: 8px 14px;
+  border-radius: 10px;
+}
+
+.lookup-submit-btn {
+  padding: 11px 20px !important;
+  font-weight: 700 !important;
+  border-radius: 10px !important;
+}
+
+.chip-pass {
+  border-color: #10b981 !important;
+  color: #047857 !important;
+  background: #ecfdf5 !important;
+}
+
+/* Hand Hygiene Demonstration Panel */
+.hand-hygiene-demo-container {
+  background: #ffffff;
+  border: 1.5px solid #ccede5;
+  border-radius: 18px;
+  padding: 16px 20px;
+  margin-top: 14px;
+  box-shadow: 0 2px 12px rgba(13, 148, 136, 0.06);
+}
+
+.hand-hygiene-header-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid #edf4f1;
+}
+
+.hand-hygiene-header-banner .demo-badge {
+  display: inline-block;
+  align-self: flex-start;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #0d9488;
+  background: #e6f7f4;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+
+.hand-hygiene-header-banner strong {
+  font-size: 16px;
+  color: #064e3b;
+}
+
+.hand-hygiene-header-banner small {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.hand-steps-interactive-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.hand-step-pill-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 6px !important;
+  min-height: 48px !important;
+  background: #f8faf9 !important;
+  border: 1px solid #d5e5df !important;
+  border-radius: 10px !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.hand-step-pill-btn:hover {
+  background: #eef7f4 !important;
+  border-color: #0d9488 !important;
+}
+
+.hand-step-pill-btn.selected {
+  background: #0d9488 !important;
+  border-color: #0d9488 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.3) !important;
+}
+
+.hand-step-badge {
+  font-size: 10px;
+  font-weight: 700;
+  opacity: 0.85;
+}
+
+.hand-step-pill-btn.selected .hand-step-badge {
+  color: #ccede5;
+}
+
+.hand-step-name {
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.hand-current-cue {
+  font-size: 13.5px;
+  color: #0f4039;
+  margin: 10px 0 0;
+  padding: 6px 12px;
+  background: #f0fdf9;
+  border-radius: 8px;
+}

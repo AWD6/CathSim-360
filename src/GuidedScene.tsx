@@ -554,11 +554,25 @@ function Pelvis({
 
   useFrame(({ clock }) => {
     if (cloth.current) {
-      const t = (clock.elapsedTime * 0.5) % 1;
       if (sex === 'female') {
-        cloth.current.position.y = 1.35 - t * 0.55;
-        cloth.current.position.z = 0.52 - t * 0.15;
+        // Strict single-direction wipe: Front to Back (หน้าไปหลัง)
+        // Never wipe back and forth!
+        const cycle = (clock.elapsedTime * 0.45) % 1; // 0.0 to 1.0
+        if (cycle < 0.65) {
+          // Stroke phase: Moving from Front (meatus/anterior y=1.30, z=0.20) to Back (posterior y=0.85, z=0.12) touching the surface
+          const stroke = cycle / 0.65;
+          cloth.current.position.y = 1.30 - stroke * 0.45;
+          cloth.current.position.z = 0.20 - stroke * 0.08;
+          cloth.current.rotation.x = -0.2;
+        } else {
+          // Lift-and-return phase: Lifts off the body (z moves outwards to 0.42) and returns to the top WITHOUT touching
+          const ret = (cycle - 0.65) / 0.35;
+          cloth.current.position.y = 0.85 + ret * 0.45;
+          cloth.current.position.z = 0.20 + Math.sin(ret * Math.PI) * 0.22;
+          cloth.current.rotation.x = -0.2 + Math.sin(ret * Math.PI) * 0.3;
+        }
       } else {
+        const t = (clock.elapsedTime * 0.5) % 1;
         cloth.current.position.x = Math.sin(t * Math.PI * 2) * 0.12;
         cloth.current.position.y = 1.32 + Math.cos(t * Math.PI * 2) * 0.08;
       }
@@ -596,9 +610,14 @@ function Pelvis({
           <Ball p={[0, 1.08, 0.15]} s={[0.045, 0.07, 0.02]} c="#b07d6c" />
           <Ball p={[0, 0.72, 0.08]} s={[0.035, 0.035, 0.015]} c="#9c6858" />
 
-          <group position={[0.3, 1.05, 0.25]}>
-            <Line points={[[0, 0.35, 0], [0, -0.35, 0]]} color="#0284c7" lineWidth={4} />
-            <Line points={[[-0.06, -0.28, 0], [0, -0.35, 0], [0.06, -0.28, 0]]} color="#0284c7" lineWidth={4} />
+          {/* Directional Single-Way Arrow Indicator: Front to Back Only (ทิศทางเดียว: ด้านหน้าไปด้านหลังเท่านั้น) */}
+          <group position={[0.28, 1.05, 0.22]}>
+            <Line points={[[0, 0.35, 0], [0, -0.35, 0]]} color="#0284c7" lineWidth={6} />
+            <Line points={[[-0.07, -0.26, 0], [0, -0.35, 0], [0.07, -0.26, 0]]} color="#0284c7" lineWidth={6} />
+            <mesh position={[0, 0, -0.01]}>
+              <planeGeometry args={[0.06, 0.72]} />
+              <meshBasicMaterial color="#38bdf8" transparent opacity={0.35} />
+            </mesh>
           </group>
         </group>
       ) : (
@@ -994,34 +1013,46 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
 
   let catheterPoints: V[];
   if ((!straight && topic === 'tube') || (topic === 'trouble' && (!straight || troubleDemo === 'kink'))) {
-    // Realistic sharp Z-kink / loop in the catheter tube (สายพับงอจริง)
+    // ตอนเสนอว่ามีการทับสาย: สายมุดอยู่ใต้ต้นขาผู้ป่วย (y = 1.18 ใต้ต้นขา) และพับงอจริง ทำให้ปัสสาวะไม่ไหล
     catheterPoints = [
       insertionPoint,
-      [-0.35, 1.32, 0.52],
-      [-0.02, 1.44, 0.58],
-      [-0.18, 1.14, 0.58],
-      [0.24, 1.36, 0.62],
-      [0.12, 1.12, 0.6],
+      [-0.45, 1.28, 0.36],
+      [-0.30, 1.18, 0.44], // สายมุดอยู่ใต้ต้นขา (การทับสาย)
+      [-0.14, 1.20, 0.50],
+      [0.08, 1.25, 0.54],
+      [0.26, 1.15, 0.58],
       bagInlet
     ];
   } else if (topic === 'secure' && tape > 0) {
     const thighX = tape === 1 ? -1.0 : -0.3;
     if (slackTight) {
-      catheterPoints = [insertionPoint, [thighX, 1.54, 0.44], bagInlet];
+      catheterPoints = [
+        insertionPoint,
+        [-0.48, 1.54, 0.36],
+        [thighX, 1.55, 0.44], // พาดบนหน้าขาแน่นพอดี
+        [0.2, 1.35, 0.55],
+        bagInlet
+      ];
     } else {
       catheterPoints = [
         insertionPoint,
-        [thighX - 0.05, 1.45, 0.42],
-        [thighX, 1.54, 0.44],
-        [0.3, 1.15, 0.65],
+        [-0.48, 1.54, 0.36],
+        [thighX - 0.05, 1.55, 0.42],
+        [thighX, 1.56, 0.44], // พาดบนหน้าขาอย่างนุ่มนวล หย่อนพอดี ไม่ตึงรั้ง
+        [0.10, 1.46, 0.52],
+        [0.35, 1.25, 0.60],
         bagInlet
       ];
     }
   } else {
+    // สายสวนไม่ให้แสดงทะลุขาผู้ป่วย: ให้สายพาดอยู่บนขาผู้ป่วยเสมอ (y = 1.56 เหนือผิวต้นขา 1.53)
     catheterPoints = [
       insertionPoint,
-      [-0.25, Math.min(1.35, height + 0.1), 0.55],
-      [0.35, Math.min(1.15, height + 0.05), 0.65],
+      [-0.48, 1.54, 0.36], // ขึ้นจากรูเปิดท่อปัสสาวะมาที่ขอบในของต้นขา
+      [-0.30, 1.56, 0.44], // พาดอยู่บนหน้าขาผู้ป่วยอย่างชัดเจน (y = 1.56 > 1.53)
+      [-0.12, 1.54, 0.50], // โค้งรับขอบนอกของต้นขา
+      [0.08, 1.42, 0.54],  // ทอดตัวลงสู่ผ้าปูเตียงอย่างเป็นธรรมชาติ
+      [0.38, Math.min(1.22, height + 0.15), 0.60],
       bagInlet
     ];
   }
@@ -1289,21 +1320,24 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
 
             {topic === 'change' && (
               <>
-                {/* Foley Catheter Tube coming from Patient to the Catheter-Bag Junction (ข้อต่อที่ต่อจากสายสวนปัสสาวะ) */}
+                {/* Foley Catheter Tube coming from Patient to the Catheter-Bag Junction (ข้อต่อที่ต่อจากสายสวนปัสสาวะ) พาดบนหน้าขาผู้ป่วย */}
                 <Line
                   points={
                     junctionFolded
                       ? [
                           insertionPoint,
-                          [-0.45, 1.47, 0.38],
-                          [-0.26, 1.56, 0.48],
-                          [-0.22, 1.43, 0.52],
-                          [-0.14, 1.46, 0.55]
+                          [-0.48, 1.54, 0.36],
+                          [-0.30, 1.56, 0.44], // พาดบนหน้าขา
+                          [-0.20, 1.55, 0.48], // พับสายชั่วคราวเหนือข้อต่อบนหน้าขา
+                          [-0.14, 1.50, 0.52],
+                          [-0.08, 1.48, 0.55]
                         ]
                       : [
                           insertionPoint,
-                          [-0.4, 1.47, 0.42],
-                          [-0.14, 1.46, 0.55]
+                          [-0.48, 1.54, 0.36],
+                          [-0.30, 1.56, 0.44], // พาดบนหน้าขาผู้ป่วยอย่างชัดเจน
+                          [-0.14, 1.52, 0.50],
+                          [-0.08, 1.48, 0.55]
                         ]
                   }
                   color="#d4af37"
@@ -1316,12 +1350,12 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
 
                 {/* Catheter Funnel / Junction Port on the Foley Catheter (ข้อต่อสายสวนปัสสาวะ) */}
                 <group
-                  position={[-0.08, 1.46, 0.55]}
+                  position={[-0.08, 1.48, 0.55]}
                   onClick={(e) => {
                     e.stopPropagation();
                     if (!junctionWiped) {
                       setJunctionWiped(true);
-                      record('เช็ดรอบข้อต่อสายสวนปัสสาวะด้วยสำลีชุบแอลกอฮอล์');
+                      record('เช็ดอุปกรณ์และข้อต่อสายสวนปัสสาวะด้วยสำลีชุบแอลกอฮอล์ 70%');
                     } else {
                       setConnected((c) => !c);
                       record(connected ? 'ปลดถุงเดิมออกจากข้อต่อสายสวนปัสสาวะ' : 'สวมหัวต่อถุงใหม่เข้ากับข้อต่อสายสวนปัสสาวะ');
@@ -1569,23 +1603,34 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
         )}
 
         {topic === 'hands' && (
-          <>
-            <div className="control-row">
+          <div className="hand-hygiene-demo-container">
+            <div className="hand-hygiene-header-banner">
+              <span className="demo-badge">ภาพสาธิตท่าล้างมืออ้างอิงท่าจริง 7 ขั้นตอน (IC มาตรฐานสากล)</span>
+              <strong>{handPhases[phase]}</strong>
+              <small>แนะนำถูอย่างน้อย 15–20 วินาทีในแต่ละท่า เพื่อฆ่าเชื้อโรคให้ทั่วถึง</small>
+            </div>
+            <div className="hand-steps-interactive-grid">
               {handPhases.map((hp, i) => (
                 <button
                   key={hp}
-                  className={phase === i ? 'selected' : ''}
+                  className={`hand-step-pill-btn ${phase === i ? 'selected' : ''}`}
                   onClick={() => {
                     setPhase(i);
                     record(hp);
                   }}
+                  title={hp}
                 >
-                  {hp}
+                  <span className="hand-step-badge">ท่าที่ {i + 1}</span>
+                  <span className="hand-step-name">{['1. หน้า', '2. หลัง', '3. กลาง', '4. ปั้น', '5. โป้ง', '6. ปลาย', '7. ข้อ', '8. น้ำสะอาด'][i]}</span>
                 </button>
               ))}
             </div>
-            {hint && <p aria-live="polite">ขั้นตอนปัจจุบัน: {handPhases[phase]}</p>}
-          </>
+            {hint && (
+              <p aria-live="polite" className="hand-current-cue">
+                กำลังสาธิต: <strong>{handPhases[phase]}</strong> (คลิกเลือกเปลี่ยนท่าได้ หรือคลิกที่มือ 3 มิติเพื่อขยับได้ค่ะ)
+              </p>
+            )}
+          </div>
         )}
 
         {topic === 'drain' && (
@@ -1604,7 +1649,7 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
                 {valve ? '3. ปิดก๊อกให้สนิท' : '2. เปิดก๊อกระบาย'}
               </button>
               <button onClick={doWipeSpout} className={wipe ? 'selected' : ''}>
-                4. เช็ดปลายก๊อกด้วยสำลีชุบแอลกอฮอล์
+                4. เช็ดอุปกรณ์ ถุง และปลายก๊อกด้วยแอลกอฮอล์ 70%
               </button>
               <button onClick={doStowSpout} className={stowed ? 'selected' : ''}>
                 5. เก็บปลายก๊อกเข้าที่
@@ -1623,7 +1668,7 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
             </div>
             <p>
               ปัสสาวะจำลองคงเหลือ: {Math.round(fill * 100)}% · สถานะก๊อก: {valve ? 'เปิดอยู่' : 'ปิดสนิท'}
-              {wipe ? ' · เช็ดแอลกอฮอล์แล้ว' : ''}
+              {wipe ? ' · เช็ดอุปกรณ์ ถุง และปลายก๊อกด้วยแอลกอฮอล์ 70% แล้ว' : ''}
               {stowed ? ' · เก็บปลายก๊อกเรียบร้อย' : ''}
             </p>
           </>
@@ -1769,10 +1814,10 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
                 className={junctionWiped ? 'selected' : ''}
                 onClick={() => {
                   setJunctionWiped(true);
-                  record('2. เช็ดรอบข้อต่อที่ต่อจากสายสวนปัสสาวะด้วยสำลีชุบแอลกอฮอล์');
+                  record('2. เช็ดอุปกรณ์ ข้อต่อสายสวน และถุงด้วยแอลกอฮอล์ 70%');
                 }}
               >
-                2. เช็ดข้อต่อสายสวนด้วยแอลกอฮอล์
+                2. เช็ดอุปกรณ์ ข้อต่อ และถุงด้วยแอลกอฮอล์ 70%
               </button>
               <button
                 className={!connected ? 'selected' : ''}
@@ -1874,7 +1919,7 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
             {hint && (
               <p>
                 {sex === 'female'
-                  ? 'ผู้หญิง: ใช้สบู่อ่อนล้างและเช็ดจากด้านหน้าไปด้านหลัง ราดน้ำให้ฟองสบู่ไหลออก แล้วซับให้แห้ง'
+                  ? 'ผู้หญิง: เน้นย้ำทำความสะอาดทิศทางเดียวเสมอ โดยเช็ดจากด้านหน้าไปด้านหลัง (ห้ามเช็ดถูย้อนไปย้อนมาเด็ดขาด) ราดน้ำสะอาดล้างฟองสบู่ออก แล้วซับให้แห้งสนิท'
                   : 'ผู้ชาย: รูดหนังหุ้มปลายเท่าที่ทำได้โดยไม่ฝืน ล้างด้วยสบู่อ่อน ราดน้ำสะอาด แล้วรูดหนังหุ้มปลายกลับทันที'}
               </p>
             )}

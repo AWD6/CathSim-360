@@ -1729,22 +1729,146 @@ export default function Portal() {
                 {adminSession?.role !== 'admin' ? (
                   <section className="mandatory-login-gate">{renderAdminLoginForm()}</section>
                 ) : (
-                  <section className="portal-report">
-                    <div className="report-top-row">
-                      <div>
-                        <h1>CathReport · ระบบจัดการและดูข้อมูลผู้ป่วยรายบุคคลสำหรับ Admin</h1>
+                  <section className="portal-report admin-dashboard">
+                    {/* Top Dashboard Header */}
+                    <div className="admin-dash-header">
+                      <div className="admin-dash-title-group">
+                        <div className="admin-badge-row">
+                          <span className="admin-shield-badge">🛡️ ผู้ดูแลระบบ (Admin Only)</span>
+                          <span className="live-sync-pill">🟢 เชื่อมต่อ Google Sheet แบบสด (Live)</span>
+                        </div>
+                        <h1>CathReport · Dashboard ผู้ดูแลระบบ</h1>
                         <p>
-                          ตรวจสอบผลการเรียนรู้รายบุคคลด้วยรหัส <strong>CS ID</strong> (เกณฑ์ผ่าน ≥ 80%) และเชื่อมโยงข้อมูลความลับ (HN / ชื่อ - นามสกุล) ไว้ที่ Google Sheet
+                          ศูนย์วิเคราะห์ข้อมูลผลการประเมินทักษะการดูแลสายสวนปัสสาวะรายบุคคลด้วยรหัส <strong>CS ID</strong> (เกณฑ์ผ่าน ≥ 80%) และเชื่อมโยงข้อมูลความลับทางการแพทย์ (HN / ชื่อ - นามสกุล) เก็บไว้ที่ Google Sheet
                         </p>
                       </div>
-                      <button onClick={logoutAll}>ออกจากระบบ Admin</button>
+                      <button className="admin-logout-btn" onClick={logoutAll}>🚪 ออกจากระบบ Admin</button>
+                    </div>
+
+                    {/* Symmetrical 4-Card KPI Overview Dashboard Tiles */}
+                    <div className="admin-kpi-grid">
+                      <div className="kpi-card">
+                        <div className="kpi-icon">👥</div>
+                        <div className="kpi-content">
+                          <span className="kpi-label">ผู้ป่วยทั้งหมดในระบบ</span>
+                          <b className="kpi-value">{allPatientReports.length} <small>ราย</small></b>
+                          <span className="kpi-sub">ลงทะเบียนรับ CS ID แล้ว</span>
+                        </div>
+                      </div>
+                      <div className="kpi-card highlight-pass">
+                        <div className="kpi-icon">🏆</div>
+                        <div className="kpi-content">
+                          <span className="kpi-label">ผ่านเกณฑ์มาตรฐาน (≥ 80%)</span>
+                          <b className="kpi-value">
+                            {allPatientReports.filter((r) => r.passed80).length} / {allPatientReports.length || 1}
+                          </b>
+                          <span className="kpi-sub">
+                            {allPatientReports.length > 0
+                              ? Math.round((allPatientReports.filter((r) => r.passed80).length / allPatientReports.length) * 100)
+                              : 0}% ของผู้ป่วยทั้งหมด
+                          </span>
+                        </div>
+                      </div>
+                      <div className="kpi-card">
+                        <div className="kpi-icon">✅</div>
+                        <div className="kpi-content">
+                          <span className="kpi-label">ขั้นตอนปฏิบัติที่บันทึก</span>
+                          <b className="kpi-value">
+                            {allPatientReports.reduce((acc, r) => acc + r.confirmedSteps, 0)} <small>ขั้นตอน</small>
+                          </b>
+                          <span className="kpi-sub">กด “ทำแล้ว” ในระบบ</span>
+                        </div>
+                      </div>
+                      <div className="kpi-card">
+                        <div className="kpi-icon">🔒</div>
+                        <div className="kpi-content">
+                          <span className="kpi-label">เชื่อมโยงข้อมูลความลับ</span>
+                          <b className="kpi-value">
+                            {Object.keys(confidentialLinks).length} / {allPatientReports.length || 1}
+                          </b>
+                          <span className="kpi-sub">บันทึก HN และชื่อลง Sheet แล้ว</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Symmetrical Confidential Identity Linker Card (จัด Layout สวยงาม สมมาตร เข้ากับธีมแอพ) */}
+                    <div className="admin-confidential-link-card">
+                      <div className="confidential-header">
+                        <div className="confidential-badge-wrap">
+                          <span className="confidential-badge">🔒 ข้อมูลความลับเฉพาะ Admin · จัดเก็บลง Google Sheet · ห้ามเผยแพร่</span>
+                        </div>
+                        <h3>ช่องเชื่อมต่อข้อมูลผู้ป่วยรายบุคคล (CS ID ↔ HN และ ชื่อ - นามสกุล)</h3>
+                        <p>
+                          หลังจากผู้ป่วยสมัครบัญชีและได้รับรหัส <strong>CS ID</strong> แล้ว ให้ Admin กรอก <strong>CS ID</strong> คู่กับ <strong>HN</strong> และ <strong>ชื่อ - นามสกุล</strong> เพื่อเก็บเป็นความลับไว้ที่ Google Sheet แท็บ <code>ConfidentialIdentity</code> ที่เชื่อมต่อไว้ (ห้ามเผยแพร่ภายนอก)
+                        </p>
+                      </div>
+
+                      <div className="confidential-form-layout">
+                        <div className="confidential-inputs-grid">
+                          <div className="confidential-field">
+                            <label htmlFor="admin-csid-input">
+                              <span className="field-title">CS ID (รหัสผู้ป่วย)</span>
+                              <span className="field-hint">เช่น CS-1, CS-2</span>
+                            </label>
+                            <input
+                              id="admin-csid-input"
+                              type="text"
+                              value={linkCsIdInput}
+                              placeholder="เช่น CS-1, CS-2"
+                              onChange={(e) => setLinkCsIdInput(e.target.value)}
+                            />
+                          </div>
+                          <div className="confidential-field">
+                            <label htmlFor="admin-hn-input">
+                              <span className="field-title">HN (หมายเลขประจำตัวผู้ป่วย)</span>
+                              <span className="field-hint">หมายเลขประจำตัว รพ.</span>
+                            </label>
+                            <input
+                              id="admin-hn-input"
+                              type="text"
+                              value={linkHnInput}
+                              placeholder="กรอก HN เช่น 6501234"
+                              onChange={(e) => setLinkHnInput(e.target.value)}
+                            />
+                          </div>
+                          <div className="confidential-field">
+                            <label htmlFor="admin-name-input">
+                              <span className="field-title">ชื่อ - นามสกุล (ผู้ป่วย)</span>
+                              <span className="field-hint">ชื่อจริงสำหรับโรงพยาบาล</span>
+                            </label>
+                            <input
+                              id="admin-name-input"
+                              type="text"
+                              value={linkFullNameInput}
+                              placeholder="กรอก ชื่อ - นามสกุล ของผู้ป่วย"
+                              onChange={(e) => setLinkFullNameInput(e.target.value)}
+                            />
+                          </div>
+                        </div>
+
+                        <div className="confidential-actions-row">
+                          <button
+                            type="button"
+                            className="portal-primary confidential-submit-btn"
+                            disabled={linkBusy || !linkCsIdInput.trim() || !linkHnInput.trim() || !linkFullNameInput.trim()}
+                            onClick={saveConfidentialLink}
+                          >
+                            {linkBusy ? '⏳ กำลังบันทึกข้อมูลความลับลง Google Sheet…' : '💾 บันทึกเชื่อมข้อมูลไว้ที่ Google Sheet (ความลับ)'}
+                          </button>
+                          {confidentialLinks[normalizeCsId(linkCsIdInput)] && (
+                            <span className="confidential-linked-pill">
+                              ✓ รหัส {normalizeCsId(linkCsIdInput)} เชื่อมต่อกับ HN: {confidentialLinks[normalizeCsId(linkCsIdInput)].hn} ({confidentialLinks[normalizeCsId(linkCsIdInput)].fullName}) เรียบร้อยแล้ว
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
 
                     {/* CS ID Search & Quick Selector Bar */}
                     <div className="cs-lookup-panel">
                       <div className="cs-lookup-input-row">
                         <label>
-                          ใส่ CS ID เพื่อดูข้อมูลผู้ป่วยรายบุคคล:
+                          <span className="field-title">ค้นหาหรือใส่รหัส CS ID เพื่อดูข้อมูลผู้ป่วยรายบุคคล:</span>
                           <input
                             type="text"
                             value={reportCsInput}
@@ -1760,85 +1884,38 @@ export default function Portal() {
                           />
                         </label>
                         <button
-                          className="portal-primary"
+                          className="portal-primary lookup-submit-btn"
                           onClick={() => {
                             const norm = normalizeCsId(reportCsInput || 'CS-1');
                             setSelectedCsId(norm);
                             setReportCsInput(norm);
                           }}
                         >
-                          ดูข้อมูล {normalizeCsId(reportCsInput || 'CS-1')}
+                          🔍 ดูข้อมูล {normalizeCsId(reportCsInput || 'CS-1')}
                         </button>
                       </div>
 
                       {allKnownCsIds.length > 0 && (
                         <div className="cs-quick-chips">
                           <span>รหัส CS ID ในระบบ ({allKnownCsIds.length} ราย):</span>
-                          {allKnownCsIds.map((id) => (
-                            <button
-                              key={id}
-                              className={selectedCsId === id ? 'selected' : ''}
-                              onClick={() => {
-                                setSelectedCsId(id);
-                                setReportCsInput(id);
-                              }}
-                            >
-                              {id}
-                            </button>
-                          ))}
+                          {allKnownCsIds.map((id) => {
+                            const pReport = allPatientReports.find((r) => r.csId === id);
+                            const isPass = pReport?.passed80;
+                            return (
+                              <button
+                                key={id}
+                                className={`${selectedCsId === id ? 'selected' : ''} ${isPass ? 'chip-pass' : ''}`}
+                                onClick={() => {
+                                  setSelectedCsId(id);
+                                  setReportCsInput(id);
+                                }}
+                              >
+                                {id} {isPass ? '✓' : ''}
+                              </button>
+                            );
+                          })}
                         </div>
                       )}
-                    </div>
-
-                    {/* Confidential Identity Linker Box (CS ID -> HN + ชื่อ - นามสกุล in Google Sheet, Do Not Publish) */}
-                    <div className="admin-confidential-link-card">
-                      <div className="confidential-header">
-                        <div>
-                          <span className="confidential-badge">ความลับเฉพาะ Admin · เก็บไว้ที่ Google Sheet · ห้ามเผยแพร่</span>
-                          <h3>ช่องเชื่อมต่อข้อมูลผู้ป่วยรายบุคคล (CS ID ↔ HN และ ชื่อ - นามสกุล)</h3>
-                          <p>
-                            หลังจากผู้ป่วยสมัครบัญชีและได้รับรหัส <strong>CS ID</strong> แล้ว ให้ Admin กรอก <strong>CS ID</strong> คู่กับ{' '}
-                            <strong>HN</strong> และ <strong>ชื่อ - นามสกุล</strong> เพื่อเก็บเป็นความลับไว้ที่ Google Sheet ที่ลิงก์ไว้ (ห้ามเผยแพร่)
-                          </p>
-                        </div>
-                      </div>
-
-                      <div className="confidential-form-grid">
-                        <label>
-                          CS ID (รหัสผู้ป่วย)
-                          <input
-                            type="text"
-                            value={linkCsIdInput}
-                            placeholder="เช่น CS-1, CS-2"
-                            onChange={(e) => setLinkCsIdInput(e.target.value)}
-                          />
-                        </label>
-                        <label>
-                          HN (หมายเลขประจำตัวผู้ป่วย)
-                          <input
-                            type="text"
-                            value={linkHnInput}
-                            placeholder="กรอก HN ของผู้ป่วย"
-                            onChange={(e) => setLinkHnInput(e.target.value)}
-                          />
-                        </label>
-                        <label>
-                          ชื่อ - นามสกุล (ผู้ป่วย)
-                          <input
-                            type="text"
-                            value={linkFullNameInput}
-                            placeholder="กรอก ชื่อ - นามสกุล ของผู้ป่วย"
-                            onChange={(e) => setLinkFullNameInput(e.target.value)}
-                          />
-                        </label>
-                        <button
-                          className="portal-primary"
-                          disabled={linkBusy || !linkCsIdInput.trim() || !linkHnInput.trim() || !linkFullNameInput.trim()}
-                          onClick={saveConfidentialLink}
-                        >
-                          {linkBusy ? 'กำลังบันทึกเป็นความลับ…' : 'บันทึกเชื่อมข้อมูลไว้ที่ Google Sheet (ความลับ)'}
-                        </button>
-                      </div>
                     </div>
 
                     {/* Selected Patient Individual Report Card (CS-1, CS-2, ...) */}
