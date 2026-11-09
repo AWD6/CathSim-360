@@ -2789,3 +2789,71 @@
     min-height: 46px;
   }
 }
+
+/* CS- Prefix Group & ID Selector for Patient Login */
+.guided-app .login-id-type-switcher {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.guided-app.portal .login-id-type-switcher button.id-type-btn {
+  min-height: 38px;
+  padding: 6px 10px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 9px;
+  border: 1px solid #d1deda;
+  background: #f8faf9;
+  color: #4b635f;
+  transition: all 0.15s ease;
+}
+
+.guided-app.portal .login-id-type-switcher button.id-type-btn.active {
+  background: #0d9488;
+  color: #ffffff;
+  border-color: #0d9488;
+  box-shadow: 0 2px 6px rgba(13, 148, 136, 0.25);
+}
+
+.guided-app .cs-prefix-input-wrap {
+  display: flex;
+  align-items: stretch;
+  border: 1.5px solid #dbe5e2;
+  border-radius: 12px;
+  background: #fafcfb;
+  overflow: hidden;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.guided-app .cs-prefix-input-wrap:focus-within {
+  border-color: #0d9488;
+  box-shadow: 0 0 0 4px rgba(13, 148, 136, 0.12);
+}
+
+.guided-app .cs-static-prefix {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 16px;
+  background: #e6f7f4;
+  color: #0d9488;
+  font-size: 17px;
+  font-weight: 800;
+  letter-spacing: 1px;
+  border-right: 1.5px solid #ccede5;
+  user-select: none;
+}
+
+.guided-app .cs-prefix-input-wrap input {
+  flex: 1;
+  min-height: 50px;
+  padding: 10px 14px;
+  border: 0;
+  background: transparent;
+  color: #0f4039;
+  font-size: 17px;
+  font-weight: 600;
+  outline: none;
+}

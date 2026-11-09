@@ -352,6 +352,7 @@ export type TopicProgressSummary = {
   totalSteps: number;
   confirmedSteps: number;
   viewedSteps: number;
+  completedCount: number;
   scorePercent: number;
   passed: boolean;
   lastDate: string | null;
@@ -527,6 +528,8 @@ export function evaluatePatientProgress(events: StepEvent[], rawCsId: string): P
 
     const confirmedSteps = confirmedSet.size;
     const viewedSteps = viewedSet.size;
+    const lastStepIndex = t.steps.length - 1;
+    const completedCount = tEvents.filter((e) => e.step === lastStepIndex).length;
     if (viewedSteps > 0) topicsLearned += 1;
     totalConfirmed += confirmedSteps;
     totalViewed += viewedSteps;
@@ -539,6 +542,7 @@ export function evaluatePatientProgress(events: StepEvent[], rawCsId: string): P
       totalSteps: t.steps.length,
       confirmedSteps,
       viewedSteps,
+      completedCount,
       scorePercent,
       passed: scorePercent >= 80,
       lastDate: topicLastDate,

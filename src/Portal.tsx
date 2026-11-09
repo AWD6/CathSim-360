@@ -229,6 +229,8 @@ export default function Portal() {
   // Mandatory Login Gate State (Forces login first for both User and Admin on open)
   const [loginRoleTab, setLoginRoleTab] = useState<'patient' | 'admin'>('patient');
   const [patientAuthMode, setPatientAuthMode] = useState<'login' | 'register'>('login');
+  const [loginIdMode, setLoginIdMode] = useState<'csId' | 'username'>('csId');
+  const [patientNumberInput, setPatientNumberInput] = useState('');
 
   // Patient Session & Credentials
   const [patientSession, setPatientSession] = useState<Session | null>(null);
@@ -470,28 +472,17 @@ export default function Portal() {
       setNotice('กรุณากำหนดชื่อบัญชีผู้ใช้ (Username) อย่างน้อย 2 ตัวอักษรค่ะ');
       return;
     }
-    if (pin.length < 3) {
-      setNotice('กรุณากำหนดรหัส PIN อย่างน้อย 3–4 หลักค่ะ');
+    if (!/^\d{6}$/.test(pin)) {
+      setNotice('กรุณากำหนดรหัส PIN เป็นตัวเลข 6 หลักค่ะ (เช่น 123456)');
       return;
     }
 
-    // Check if username is already registered locally
-    const duplicate = Object.values(patientAccounts).find(
-      (acc) => acc.username.toLowerCase() === rawUser.toLowerCase() || acc.csId.toLowerCase() === rawUser.toLowerCase()
-    );
-    if (duplicate) {
-      setNotice(`บัญชีผู้ใช้ "${rawUser}" มีในระบบแล้ว (${duplicate.csId}) กรุณากดเข้าสู่ระบบด้วยรหัส PIN ค่ะ`);
-      setPatientAuthMode('login');
-      return;
-    }
-
-    const fallbackCsId = nextAvailableCsId(Object.keys(patientAccounts).concat(events.map((e) => e.code)));
     setPatientBusy(true);
     setSyncStatus('syncing');
 
     try {
       const res = await request({ action: 'patientRegister', username: rawUser, access: pin });
-      const assignedCsId = normalizeCsId(res.code || fallbackCsId);
+      const assignedCsId = normalizeCsId(res.code);
       const sess: Session = { token: res.token, role: 'patient', code: assignedCsId, username: rawUser };
       setPatientSession(sess);
 
@@ -514,81 +505,48 @@ export default function Portal() {
       setReportCsInput(assignedCsId);
       setSelectedCsId(assignedCsId);
       setView('home');
-      setNotice(`สมัครบัญชีสำเร็จ! รหัสผู้ป่วยของคุณคือ ${assignedCsId} (เชื่อมข้อมูลเข้า Google Sheet อัตโนมัติแล้วค่ะ)`);
-    } catch {
-      // Fallback: Assign next sequential CS-... locally and queue sync to Google Sheet
-      const assignedCsId = fallbackCsId;
-      const sess: Session = { token: `local-patient-${assignedCsId}`, role: 'patient', code: assignedCsId, username: rawUser };
-      setPatientSession(sess);
-
-      const nextAccounts: Record<string, PatientAccountRecord> = {
-        ...patientAccounts,
-        [assignedCsId]: {
-          csId: assignedCsId,
-          username: rawUser,
-          pin,
-          createdAt: new Date().toISOString()
-        }
-      };
-      setPatientAccounts(nextAccounts);
-      try {
-        localStorage.setItem(patientAccountsKey, JSON.stringify(nextAccounts));
-      } catch {}
-
-      // Also attempt patientLogin with assignedCsId to register it in Google Sheet if endpoint is reachable
-      void request({ action: 'patientLogin', code: assignedCsId, access: pin }).catch(() => {});
-
+      setNotice(`สมัครบัญชีสำเร็จ! รหัสผู้ป่วยของคุณคือ ${assignedCsId} (บันทึกข้อมูลเข้า Google Sheet เรียบร้อยแล้วค่ะ)`);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
       setSyncStatus('local');
-      setPatientPinInput('');
-      setReportCsInput(assignedCsId);
-      setSelectedCsId(assignedCsId);
-      setView('home');
-      setNotice(`สมัครบัญชีสำเร็จ! รหัสผู้ป่วยของคุณคือ ${assignedCsId} ค่ะ`);
+      setNotice(
+        `ไม่สามารถสมัครบัญชีลง Google Sheet ได้ค่ะ (${msg}) กรุณาตรวจสอบการเชื่อมต่อ หรืออัปเดตสคริปต์ Google Apps Script เป็นเวอร์ชันล่าสุดค่ะ`
+      );
     } finally {
       setPatientBusy(false);
     }
   };
 
-  // Patient Login Handler: Login with Username (or CS-...) and PIN
+  // Patient Login Handler: Login with Username or CS-ID + 6-digit PIN
   const loginPatient = async () => {
-    const rawUser = patientUsernameInput.trim();
+    const targetCode = loginIdMode === 'csId'
+      ? (patientNumberInput.trim() ? (patientNumberInput.trim().toUpperCase().startsWith('CS-') ? patientNumberInput.trim().toUpperCase() : `CS-${patientNumberInput.trim().replace(/\D/g, '')}`) : '')
+      : patientUsernameInput.trim();
     const pin = patientPinInput.trim();
-    if (!rawUser) {
-      setNotice('กรุณากรอกบัญชีผู้ใช้ (Username) ค่ะ');
+
+    if (!targetCode) {
+      setNotice(loginIdMode === 'csId' ? 'กรุณากรอกหมายเลขรหัสผู้ป่วย (เช่น 1, 2) ค่ะ' : 'กรุณากรอกชื่อบัญชีผู้ใช้ (Username) ค่ะ');
       return;
     }
-    if (pin.length < 3) {
-      setNotice('กรุณากรอกรหัส PIN อย่างน้อย 3–4 หลักค่ะ');
+    if (!/^\d{6}$/.test(pin)) {
+      setNotice('กรุณากรอกรหัส PIN เป็นตัวเลข 6 หลักค่ะ');
       return;
     }
 
     // Find matching local account by Username or CS ID
     const matchedLocal = Object.values(patientAccounts).find(
       (acc) =>
-        acc.username.toLowerCase() === rawUser.toLowerCase() ||
-        acc.csId.toLowerCase() === rawUser.toLowerCase() ||
-        acc.csId.toLowerCase() === normalizeCsId(rawUser).toLowerCase()
+        acc.username.toLowerCase() === targetCode.toLowerCase() ||
+        acc.csId.toLowerCase() === targetCode.toLowerCase() ||
+        acc.csId.toLowerCase() === normalizeCsId(targetCode).toLowerCase()
     );
-
-    if (matchedLocal && matchedLocal.pin && matchedLocal.pin !== pin) {
-      setNotice('รหัส PIN ไม่ถูกต้อง กรุณาตรวจสอบอีกครั้งค่ะ');
-      return;
-    }
-
-    const targetCode = matchedLocal
-      ? matchedLocal.csId
-      : /^cs-?\d+$/i.test(rawUser) || /^\d+$/.test(rawUser)
-      ? normalizeCsId(rawUser)
-      : nextAvailableCsId(Object.keys(patientAccounts).concat(events.map((e) => e.code)));
-
-    const resolvedUsername = matchedLocal ? matchedLocal.username : rawUser;
 
     setPatientBusy(true);
     setSyncStatus('syncing');
     try {
       const res = await request({ action: 'patientLogin', code: targetCode, access: pin });
       const finalCsId = normalizeCsId(res.code || targetCode);
-      const finalUsername = res.username || resolvedUsername;
+      const finalUsername = res.username || matchedLocal?.username || targetCode;
       const sess: Session = { token: res.token, role: 'patient', code: finalCsId, username: finalUsername };
       setPatientSession(sess);
 
@@ -616,41 +574,28 @@ export default function Portal() {
         });
       }
 
-      const pendingForPatient = localEvents().filter((e) => normalizeCsId(e.code) === finalCsId);
-      for (const ev of pendingForPatient.slice(-50)) {
-        await request({ action: 'progress', token: res.token, event: { ...ev, code: finalCsId } }).catch(() => {});
-      }
-
       setSyncStatus('synced');
       setPatientPinInput('');
       setReportCsInput(finalCsId);
       setSelectedCsId(finalCsId);
       setView('home');
       setNotice(`เข้าสู่ระบบสำเร็จ! รหัสผู้ป่วยของคุณคือ ${finalCsId} ค่ะ`);
-    } catch {
-      const sess: Session = { token: `local-patient-${targetCode}`, role: 'patient', code: targetCode, username: resolvedUsername };
-      setPatientSession(sess);
-
-      const nextAccounts: Record<string, PatientAccountRecord> = {
-        ...patientAccounts,
-        [targetCode]: {
-          csId: targetCode,
-          username: resolvedUsername,
-          pin,
-          createdAt: matchedLocal?.createdAt || new Date().toISOString()
-        }
-      };
-      setPatientAccounts(nextAccounts);
-      try {
-        localStorage.setItem(patientAccountsKey, JSON.stringify(nextAccounts));
-      } catch {}
-
-      setSyncStatus('local');
-      setPatientPinInput('');
-      setReportCsInput(targetCode);
-      setSelectedCsId(targetCode);
-      setView('home');
-      setNotice(`เข้าสู่ระบบสำเร็จ! รหัสผู้ป่วยของคุณคือ ${targetCode} ค่ะ`);
+    } catch (err: unknown) {
+      if (matchedLocal && matchedLocal.pin === pin) {
+        // Fallback for offline mode if local account exists and matches PIN
+        const finalCsId = matchedLocal.csId;
+        const sess: Session = { token: `local-patient-${finalCsId}`, role: 'patient', code: finalCsId, username: matchedLocal.username };
+        setPatientSession(sess);
+        setSyncStatus('local');
+        setPatientPinInput('');
+        setReportCsInput(finalCsId);
+        setSelectedCsId(finalCsId);
+        setView('home');
+        setNotice(`เข้าสู่ระบบในโหมดออฟไลน์ (รหัส ${finalCsId}) ค่ะ`);
+      } else {
+        const msg = err instanceof Error ? err.message : String(err);
+        setNotice(`เข้าสู่ระบบไม่สำเร็จ: ${msg}`);
+      }
     } finally {
       setPatientBusy(false);
     }
@@ -1215,41 +1160,86 @@ export default function Portal() {
                       <h2>{patientAuthMode === 'login' ? 'เข้าสู่ระบบสำหรับผู้ป่วย' : 'สมัครบัญชีผู้ป่วย'}</h2>
                       <p className="patient-auth-subtitle">
                         {patientAuthMode === 'login'
-                          ? 'เข้าสู่ระบบด้วยบัญชีและ PIN'
-                          : 'ตั้งบัญชีผู้ใช้และ PIN ของคุณเอง'}
+                          ? 'เข้าสู่ระบบด้วยรหัส CS หรือชื่อบัญชี และ PIN 6 หลัก'
+                          : 'ตั้งชื่อบัญชีและ PIN 6 หลักของคุณเอง'}
                       </p>
                     </div>
 
                     {patientAuthMode === 'login' ? (
                       <div className="auth-fields-stack">
+                        <div className="login-id-type-switcher" role="tablist" aria-label="เลือกวิธีระบุตัวตน">
+                          <button
+                            type="button"
+                            className={`id-type-btn ${loginIdMode === 'csId' ? 'active' : ''}`}
+                            onClick={() => setLoginIdMode('csId')}
+                          >
+                            เข้าด้วยรหัสคนไข้ (CS-)
+                          </button>
+                          <button
+                            type="button"
+                            className={`id-type-btn ${loginIdMode === 'username' ? 'active' : ''}`}
+                            onClick={() => setLoginIdMode('username')}
+                          >
+                            เข้าด้วยชื่อบัญชี (Username)
+                          </button>
+                        </div>
+
+                        {loginIdMode === 'csId' ? (
+                          <label className="auth-field">
+                            <span className="auth-label">รหัสผู้ป่วยของคุณ (พิมพ์เฉพาะตัวเลข)</span>
+                            <div className="cs-prefix-input-wrap">
+                              <span className="cs-static-prefix">CS-</span>
+                              <input
+                                type="text"
+                                inputMode="numeric"
+                                value={patientNumberInput}
+                                placeholder="เติมแค่เลข เช่น 1, 2, 3..."
+                                autoComplete="off"
+                                onChange={(e) => {
+                                  const v = e.target.value.replace(/^CS-?/i, '').replace(/\D/g, '');
+                                  setPatientNumberInput(v);
+                                }}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') void loginPatient();
+                                }}
+                              />
+                            </div>
+                          </label>
+                        ) : (
+                          <label className="auth-field">
+                            <span className="auth-label">ชื่อบัญชีผู้ใช้ (Username)</span>
+                            <span className="auth-input-wrap">
+                              <AuthIcon name="user" />
+                              <input
+                                type="text"
+                                value={patientUsernameInput}
+                                placeholder="กรอกชื่อบัญชีผู้ใช้"
+                                autoComplete="username"
+                                autoCapitalize="none"
+                                onChange={(e) => setPatientUsernameInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') void loginPatient();
+                                }}
+                              />
+                            </span>
+                          </label>
+                        )}
+
                         <label className="auth-field">
-                          <span className="auth-label">บัญชีผู้ใช้ (Username)</span>
-                          <span className="auth-input-wrap">
-                            <AuthIcon name="user" />
-                            <input
-                              type="text"
-                              value={patientUsernameInput}
-                              placeholder="Username หรือรหัส CS"
-                              autoComplete="username"
-                              autoCapitalize="none"
-                              onChange={(e) => setPatientUsernameInput(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') void loginPatient();
-                              }}
-                            />
-                          </span>
-                        </label>
-                        <label className="auth-field">
-                          <span className="auth-label">PIN</span>
+                          <span className="auth-label">รหัส PIN (ตัวเลข 6 หลัก)</span>
                           <span className="auth-input-wrap">
                             <AuthIcon name="lock" />
                             <input
                               type="password"
                               inputMode="numeric"
+                              maxLength={6}
                               value={patientPinInput}
-                              placeholder="กรอกรหัส PIN"
+                              placeholder="กรอกรหัส PIN 6 หลัก"
                               autoComplete="current-password"
-                              onChange={(e) => setPatientPinInput(e.target.value)}
+                              onChange={(e) => {
+                                const v = e.target.value.replace(/\D/g, '').slice(0, 6);
+                                setPatientPinInput(v);
+                              }}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') void loginPatient();
                               }}
@@ -1258,7 +1248,11 @@ export default function Portal() {
                         </label>
                         <button
                           className="portal-primary auth-submit-btn"
-                          disabled={patientBusy || !patientUsernameInput.trim() || !patientPinInput.trim()}
+                          disabled={
+                            patientBusy ||
+                            (loginIdMode === 'csId' ? !patientNumberInput.trim() : !patientUsernameInput.trim()) ||
+                            patientPinInput.length !== 6
+                          }
                           onClick={loginPatient}
                         >
                           {patientBusy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}
@@ -1301,16 +1295,20 @@ export default function Portal() {
                           </span>
                         </label>
                         <label className="auth-field">
-                          <span className="auth-label">ตั้งรหัส PIN (3–4 หลัก)</span>
+                          <span className="auth-label">ตั้งรหัส PIN (ตัวเลข 6 หลัก)</span>
                           <span className="auth-input-wrap">
                             <AuthIcon name="lock" />
                             <input
                               type="password"
                               inputMode="numeric"
+                              maxLength={6}
                               value={patientPinInput}
-                              placeholder="ตั้งรหัส PIN"
+                              placeholder="ตั้งรหัส PIN ตัวเลข 6 หลัก"
                               autoComplete="new-password"
-                              onChange={(e) => setPatientPinInput(e.target.value)}
+                              onChange={(e) => {
+                                const v = e.target.value.replace(/\D/g, '').slice(0, 6);
+                                setPatientPinInput(v);
+                              }}
                               onKeyDown={(e) => {
                                 if (e.key === 'Enter') void registerPatientAccount();
                               }}
@@ -1319,7 +1317,7 @@ export default function Portal() {
                         </label>
                         <button
                           className="portal-primary auth-submit-btn"
-                          disabled={patientBusy || !patientUsernameInput.trim() || !patientPinInput.trim()}
+                          disabled={patientBusy || !patientUsernameInput.trim() || patientPinInput.length !== 6}
                           onClick={registerPatientAccount}
                         >
                           {patientBusy ? 'กำลังสร้างบัญชี…' : 'ยืนยันสมัครบัญชี'}
@@ -1349,35 +1347,17 @@ export default function Portal() {
           </section>
         ) : (
           <>
-            {/* Active User / Patient Code Banner (Clearly shows CS-... code number to the patient) */}
+            {/* Active User / Patient Code Banner (Shows only CS ID, Username, and Logout as requested) */}
             {(view === 'home' || view === 'lesson') && (
               <section className="patient-auth-bar" aria-label="รหัสประจำตัวผู้ป่วย">
                 <div className="patient-active-strip">
                   <div className="patient-active-info">
                     <span className="cs-id-pill">
-                      รหัสผู้ป่วยของคุณ: {patientSession?.code || selectedCsId}
+                      รหัสผู้ป่วยของคุณ : {patientSession?.code || selectedCsId}
                     </span>
                     {patientSession?.username && (
-                      <span className="patient-stat-pill">บัญชี: {patientSession.username}</span>
+                      <span className="patient-stat-pill">ชื่อบัญชี: {patientSession.username}</span>
                     )}
-                    {currentPatientReport && (
-                      <>
-                        <span className="patient-stat-pill">
-                          เรียนแล้ว {currentPatientReport.topicsLearned}/{currentPatientReport.totalTopics} เรื่อง
-                        </span>
-                        <span className="patient-stat-pill">
-                          ทำได้เอง {currentPatientReport.confirmedSteps}/{currentPatientReport.totalSteps} ขั้น ({currentPatientReport.overallScorePercent}%)
-                        </span>
-                        <span className={`pass-criteria-pill ${currentPatientReport.passed80 ? 'pass' : 'pending'}`}>
-                          {currentPatientReport.passed80 ? 'ผ่านเกณฑ์ (≥ 80%)' : 'เป้าหมาย: ทำได้เอง ≥ 80%'}
-                        </span>
-                      </>
-                    )}
-                    <span className="sync-badge">
-                      {syncStatus === 'syncing'
-                        ? 'กำลังสำรองข้อมูลขึ้น Google Sheet…'
-                        : 'ลิงก์ข้อมูล Google Sheet อัตโนมัติ'}
-                    </span>
                   </div>
                   <button className="patient-logout-btn" onClick={logoutAll}>
                     ออกจากระบบ
@@ -1465,15 +1445,20 @@ export default function Portal() {
                 <div className="lesson-grid">
                   {topics.map((t, i) => {
                     const topicStat = currentPatientReport?.topicSummaries[i];
+                    const completedCount = topicStat?.completedCount || 0;
                     return (
                       <button className="lesson-card" key={t.id} onClick={() => openLesson(i)}>
                         <div className="lesson-card-top">
                           <span className="topic-number">{String(i + 1).padStart(2, '0')}</span>
-                          {topicStat && topicStat.viewedSteps > 0 && (
-                            <span className={`topic-score-pill ${topicStat.passed ? 'passed' : 'learning'}`}>
-                              ทำได้เอง {topicStat.scorePercent}% ({topicStat.confirmedSteps}/{topicStat.totalSteps})
+                          {completedCount > 0 ? (
+                            <span className="topic-score-pill passed">
+                              เรียนแล้ว {completedCount} ครั้ง
                             </span>
-                          )}
+                          ) : topicStat && topicStat.viewedSteps > 0 ? (
+                            <span className="topic-score-pill learning">
+                              กำลังเรียน
+                            </span>
+                          ) : null}
                         </div>
                         <strong>
                           {i + 1}. {t.title}
@@ -1658,11 +1643,8 @@ export default function Portal() {
                                 : audioError
                                 ? 'รอโหลดเสียงใหม่'
                                 : !ready
-                                ? 'กำลังฟังคำแนะนำ... เมื่อพูดจบจะนับถอยหลัง 8 วินาที (แนะนำให้กด “ทำแล้ว” ด้วยตนเองเพื่อผ่านเกณฑ์ ≥ 80%)'
-                                : `เลื่อนไปขั้นถัดไปอัตโนมัติใน ${left} วินาที (กดปุ่ม “ทำแล้ว” ด้วยตนเองเพื่อนับคะแนนทำได้เองค่ะ)`}
-                              <small>
-                                เกณฑ์การผ่าน: ผู้ป่วยต้องกดทำตามด้วยตนเอง (“ทำแล้ว”) มากกว่าหรือเท่ากับ 80% ของขั้นตอนทั้งหมดค่ะ
-                              </small>
+                                ? 'กำลังฟังคำแนะนำ... เมื่อพูดจบจะนับถอยหลัง 8 วินาที'
+                                : `เลื่อนไปขั้นถัดไปอัตโนมัติใน ${left} วินาที`}
                             </div>
                           )}
                         </>

@@ -30,17 +30,41 @@ test('guided progress records confirmed and auto as separate facts, with scoped 
 
 test('only admin can report or delete; scoped deletion preserves other patients',()=>{const f=fixture(),p=f.call({action:'login',code:'CS-AAAAAA',access:'keyA'}),c=f.call({action:'login',code:'CG-AAAAAA',access:'keyC'}),a=f.call({action:'login',code:'AD-AAAAAA',access:'keyD'});for(const token of [p.token,c.token])for(const action of ['report','deleteHistory'])assert.equal(f.call({action,token}).ok,false);const event={id:randomUUID(),topic:'drain',step:2,trigger:'confirmed',seconds:10,mode:'practice',actions:['เปิดก๊อก']};assert.equal(f.call({action:'progress',token:p.token,event}).ok,true);assert.deepEqual(f.call({action:'report',token:a.token}).events[0].actions,['เปิดก๊อก']);assert.equal(f.call({action:'deleteHistory',token:a.token}).ok,true);assert.equal(f.data.StepEvents.length,1);assert.equal(f.data.Attempts.length,2);});
 
-test('patientLogin supports CS-1, CS-2 with individual PIN and backs up progress to Google Sheet',()=>{
+test('patientRegister and patientLogin with 6-digit PIN and cross-device support',()=>{
   const f=fixture();
-  const p1=f.call({action:'patientLogin',code:'CS-1',access:'1234'});
-  assert.equal(p1.ok,true);
-  assert.equal(p1.code,'CS-1');
-  // Wrong PIN rejected once registered
-  assert.equal(f.call({action:'patientLogin',code:'CS-1',access:'9999'}).ok,false);
-  // Correct PIN accepted
-  const p1Again=f.call({action:'patientLogin',code:'CS-1',access:'1234'});
-  assert.equal(p1Again.ok,true);
-  // Record progress for CS-1
+  // PIN must be 6 digits
+  assert.equal(f.call({action:'patientRegister',username:'somchai',access:'123'}).ok,false);
+  // Register with 6-digit PIN
+  const reg=f.call({action:'patientRegister',username:'somchai',access:'123456'});
+  assert.equal(reg.ok,true);
+  assert.equal(reg.code,'CS-1');
+  assert.equal(reg.username,'somchai');
+
+  // Duplicate username rejected
+  assert.equal(f.call({action:'patientRegister',username:'somchai',access:'654321'}).ok,false);
+
+  // Login by Username with 6-digit PIN
+  const lUser=f.call({action:'patientLogin',code:'somchai',access:'123456'});
+  assert.equal(lUser.ok,true);
+  assert.equal(lUser.code,'CS-1');
+
+  // Login by numeric CS-ID "1" with 6-digit PIN
+  const lNum=f.call({action:'patientLogin',code:'1',access:'123456'});
+  assert.equal(lNum.ok,true);
+  assert.equal(lNum.code,'CS-1');
+
+  // Login by full "CS-1" with 6-digit PIN
+  const lFull=f.call({action:'patientLogin',code:'CS-1',access:'123456'});
+  assert.equal(lFull.ok,true);
+  assert.equal(lFull.code,'CS-1');
+
+  // Wrong PIN rejected
+  assert.equal(f.call({action:'patientLogin',code:'CS-1',access:'999999'}).ok,false);
+
+  // Unregistered account rejected
+  assert.equal(f.call({action:'patientLogin',code:'nonexistent',access:'123456'}).ok,false);
+
+  // Record progress
   const ev={id:randomUUID(),topic:'hygiene',step:0,trigger:'confirmed',seconds:14,mode:'learn',actions:['ล้างด้วยสบู่อ่อน']};
-  assert.equal(f.call({action:'progress',token:p1Again.token,event:ev}).ok,true);
+  assert.equal(f.call({action:'progress',token:lFull.token,event:ev}).ok,true);
 });

@@ -5,7 +5,7 @@ function setup() {
     Accounts:['code','role','allowed_codes','secret_hash','enabled','username'],
     Attempts:['id','participant_code','lesson','correct','seconds','mode','timestamp'],
     StepEvents:['id','participant_code','topic','step_index','trigger','seconds','timestamp','mode','actions'],
-    PatientSummary:['cs_id','username','last_learned_at','topics_learned','confirmed_steps','total_steps','score_percent','pass_status_80','learned_topics_list'],
+    PatientSummary:['cs_id','username','last_learned_at','topics_learned','confirmed_steps','total_steps','score_percent','pass_status_80','learned_topics_list','completions_summary','total_completions'],
     ConfidentialIdentity:['cs_id','hn','full_name','updated_at','confidential_policy'],
     Observations:['participant_code','lesson','observed_at','assessor_code','result','catheter_days','confirmed_cauti']
   };
@@ -44,30 +44,35 @@ function confidentialLinks_(a){
 }
 function updatePatientSummary_(code){
   try{
-    const book=book_();if(!book.insertSheet)return;
+    const book=book_();if(!book||!book.insertSheet)return;
     const limits={hands:3,hygiene:5,position:4,tube:3,secure:3,drain:5,change:5,followup:2,water:3,trouble:3};
     const totalSteps=36;
     const evs=patientEvents_(code);
     const acc=rows_('Accounts').find(r=>r[0]===code);
     const uname=acc&&acc[5]?String(acc[5]):code;
-    const confirmedMap={},topicsSet={};
+    const confirmedMap={},topicsSet={},completedMap={};
     let lastTime='';
     evs.forEach(e=>{
       if(limits[e.topic]&&e.step>=0&&e.step<limits[e.topic]){
         topicsSet[e.topic]=true;
         if(e.trigger==='confirmed')confirmedMap[e.topic+':'+e.step]=true;
+        if(e.step===limits[e.topic]-1){
+          completedMap[e.topic]=(completedMap[e.topic]||0)+1;
+        }
         if(!lastTime||String(e.time)>lastTime)lastTime=String(e.time);
       }
     });
     const confirmedCount=Object.keys(confirmedMap).length;
     const topicsList=Object.keys(topicsSet);
+    const totalCompletions=Object.values(completedMap).reduce((a,b)=>a+b,0);
     const scorePercent=Math.round((confirmedCount/totalSteps)*100);
     const passStatus=scorePercent>=80?'PASS (>=80%)':'NEEDS_PRACTICE (<80%)';
+    const completionsSummary=Object.entries(completedMap).map(([t,c])=>t+':'+c+'ครั้ง').join(', ')||(topicsList.length>0?'กำลังเรียน':'ยังไม่เคยเรียน');
     let sh=book.getSheetByName('PatientSummary');
-    if(!sh){sh=book.insertSheet('PatientSummary');sh.appendRow(['cs_id','username','last_learned_at','topics_learned','confirmed_steps','total_steps','score_percent','pass_status_80','learned_topics_list']);if(sh.setFrozenRows)sh.setFrozenRows(1);}
+    if(!sh){sh=book.insertSheet('PatientSummary');sh.appendRow(['cs_id','username','last_learned_at','topics_learned','confirmed_steps','total_steps','score_percent','pass_status_80','learned_topics_list','completions_summary','total_completions']);if(sh.setFrozenRows)sh.setFrozenRows(1);}
     const allRows=sh.getDataRange().getValues();
     for(let i=allRows.length-1;i>0;i--){if(allRows[i][0]===code&&sh.deleteRow)sh.deleteRow(i+1);}
-    sh.appendRow([code,uname,lastTime||new Date().toISOString(),topicsList.length+'/10',confirmedCount,totalSteps,scorePercent+'%',passStatus,topicsList.join(', ')]);
+    sh.appendRow([code,uname,lastTime||new Date().toISOString(),topicsList.length+'/10',confirmedCount,totalSteps,scorePercent+'%',passStatus,topicsList.join(', '),completionsSummary,totalCompletions]);
   }catch(_){}
 }
 function doPost(e){
@@ -91,10 +96,10 @@ function doPost(e){
     }
     if(b.action==='patientRegister'){
       const uname=String(b.username||'').trim(),pin=String(b.access||'').trim();
-      if(uname.length<2||uname.length>40||pin.length<3||pin.length>64)throw Error('Invalid username or PIN');
+      if(uname.length<2||uname.length>40||!/^\d{6}$/.test(pin))throw Error('ชื่อบัญชีต้องอย่างน้อย 2 ตัวอักษร และ PIN ต้องเป็นตัวเลข 6 หลัก');
       const accSheet=book_().getSheetByName('Accounts');
       const existingByUname=rows_('Accounts').find(r=>String(r[5]||'').toLowerCase()===uname.toLowerCase()||String(r[0]||'').toLowerCase()===uname.toLowerCase());
-      if(existingByUname)throw Error('Username already exists');
+      if(existingByUname)throw Error('ชื่อบัญชีนี้มีผู้ใช้งานแล้ว');
       const assignedCode=nextCsId_();
       accSheet.appendRow([assignedCode,'patient',assignedCode,digest_(assignedCode+':'+pin),true,uname]);
       updatePatientSummary_(assignedCode);
@@ -104,19 +109,21 @@ function doPost(e){
     if(b.action==='patientLogin'){
       if(typeof b.code!=='string'||typeof b.access!=='string')throw Error('Access denied');
       const rawIdentifier=b.code.trim(),pin=b.access.trim();
-      if(!rawIdentifier||pin.length<3||pin.length>64)throw Error('Invalid username or PIN');
+      if(!rawIdentifier||!/^\d{6}$/.test(pin))throw Error('PIN ต้องเป็นตัวเลข 6 หลัก');
       const limit='login:'+digest_(rawIdentifier.toUpperCase());const tries=Number(cache.get(limit)||0);if(tries>=10)throw Error('Try again later');cache.put(limit,String(tries+1),900);
       const accSheet=book_().getSheetByName('Accounts');
       const allAcc=rows_('Accounts');
-      const upperId=rawIdentifier.toUpperCase();
+      let upperId=rawIdentifier.toUpperCase();
+      if(/^\d+$/.test(upperId)) upperId='CS-'+upperId;
+      if(/^CS\d+$/.test(upperId)) upperId='CS-'+upperId.slice(2);
       let existing=allAcc.find(r=>String(r[0]||'').toUpperCase()===upperId||(r[5]&&String(r[5]).toLowerCase()===rawIdentifier.toLowerCase()));
-      let resolvedCode=existing?String(existing[0]):upperId;
-      let resolvedUser=existing&&existing[5]?String(existing[5]):rawIdentifier;
-      if(existing){
-        if(existing[4]!==true||existing[3]!==digest_(resolvedCode+':'+pin))throw Error('Access denied');
-      }else{
-        if(!/^CS-[A-Z0-9]{1,28}$/.test(upperId))resolvedCode=nextCsId_();
-        accSheet.appendRow([resolvedCode,'patient',resolvedCode,digest_(resolvedCode+':'+pin),true,resolvedUser]);
+      if(!existing){
+        throw Error('ไม่พบบัญชีผู้ใช้หรือรหัส CS นี้ในระบบ กรุณาสมัครบัญชีก่อนค่ะ');
+      }
+      let resolvedCode=String(existing[0]);
+      let resolvedUser=existing[5]?String(existing[5]):rawIdentifier;
+      if(existing[4]!==true||existing[3]!==digest_(resolvedCode+':'+pin)){
+        throw Error('รหัส PIN ไม่ถูกต้อง กรุณาตรวจสอบอีกครั้งค่ะ');
       }
       cache.remove(limit);
       const token=Utilities.getUuid()+Utilities.getUuid();cache.put('session:'+digest_(token),resolvedCode,3600);
@@ -147,7 +154,7 @@ function doPost(e){
     if(b.action==='registerPatient'){
       if(a.role!=='admin')throw Error('Access denied');
       const pCode=String(b.csId||'').trim().toUpperCase(),pPin=String(b.pin||'').trim(),pUser=String(b.username||pCode).trim();
-      if(!/^CS-[A-Z0-9]{1,28}$/.test(pCode)||pPin.length<3||pPin.length>64)throw Error('Invalid CS ID or PIN');
+      if(!/^CS-[A-Z0-9]{1,28}$/.test(pCode)||!/^\d{6}$/.test(pPin))throw Error('PIN ต้องเป็นตัวเลข 6 หลัก');
       const accSheet=book_().getSheetByName('Accounts');
       const allAcc=accSheet.getDataRange().getValues();
       for(let i=allAcc.length-1;i>0;i--){if(allAcc[i][0]===pCode&&accSheet.deleteRow)accSheet.deleteRow(i+1);}
@@ -170,6 +177,6 @@ function doPost(e){
     const lock=LockService.getScriptLock();lock.waitLock(10000);
     try{const s=book_().getSheetByName('Attempts');if(!rows_('Attempts').some(r=>r[0]===t.id))s.appendRow([t.id,a.code,t.lesson,t.correct,t.seconds,t.mode,new Date().toISOString()]);}finally{lock.releaseLock();}
     return out_({ok:true});
-  }catch(err){return out_({ok:false,error:'Access denied or request invalid. Check account, key and session.'});}
+  }catch(err){return out_({ok:false,error:err&&err.message?err.message:'Access denied or request invalid.'});}
 }
 function out_(x){return ContentService.createTextOutput(JSON.stringify(x)).setMimeType(ContentService.MimeType.JSON);}
