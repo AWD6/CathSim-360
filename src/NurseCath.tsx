@@ -33,49 +33,123 @@ export default function NurseCath({ speaking, compact = false }: Props) {
           fill="#f7dccf"
         />
 
-        {/* Symmetrical, Well-Proportioned Left & Right Arms */}
-        {/* Left Arm (Viewer's Left) - Gently poised at waist */}
+        {/* Professional Short-Sleeved Nurse Uniform (ชุดพยาบาลแขนสั้น ได้สัดส่วน งดงาม สุภาพ) */}
+        {/* Left Arm (Viewer's Left) - Gracefully poised at waist */}
         <g className="nurse-arm-left">
+          {/* Bare Forearm & Wrist (ผิวเนื้อ ท่อนแขนเรียวสวย) */}
           <path
-            d="M 118 212 C 98 232 95 268 106 308"
-            stroke="#d5e3df"
-            strokeWidth="31"
+            d="M 104 242 C 96 266 99 288 106 308"
+            stroke="#f0d0c0"
+            strokeWidth="21"
             strokeLinecap="round"
             fill="none"
           />
           <path
-            d="M 118 212 C 98 232 95 268 106 308"
-            stroke="#ffffff"
-            strokeWidth="27"
+            d="M 104 242 C 96 266 99 288 106 308"
+            stroke="#fce8dc"
+            strokeWidth="18"
             strokeLinecap="round"
             fill="none"
           />
-          {/* Left sleeve cuff */}
-          <ellipse cx="107" cy="306" rx="13" ry="6" transform="rotate(-14 107 306)" fill="#f0f9f7" stroke="#cbdcd7" strokeWidth="1.5" />
           {/* Left hand */}
-          <circle cx="109" cy="316" r="11.5" fill="#fce8dc" stroke="#f0d0c0" strokeWidth="1" />
+          <circle cx="108" cy="316" r="10.5" fill="#fce8dc" stroke="#f0d0c0" strokeWidth="1.2" />
+
+          {/* White Short Sleeve (เสื้อพยาบาลแขนสั้น คลุมต้นแขน) */}
+          <path
+            d="M 118 210 C 108 218 103 230 104 242"
+            stroke="#d5e3df"
+            strokeWidth="28"
+            strokeLinecap="round"
+            fill="none"
+          />
+          <path
+            d="M 118 210 C 108 218 103 230 104 242"
+            stroke="#ffffff"
+            strokeWidth="24"
+            strokeLinecap="round"
+            fill="none"
+          />
+          {/* Left sleeve cuff hem (ขอบพับปลายแขนเสื้อพยาบาลสีขาว สะอาด เรียบร้อย) */}
+          <ellipse
+            cx="104"
+            cy="242"
+            rx="13.5"
+            ry="5.5"
+            transform="rotate(-16 104 242)"
+            fill="#ffffff"
+            stroke="#cbdcd7"
+            strokeWidth="1.6"
+          />
+          <path
+            d="M 92 240 Q 104 248 116 244"
+            stroke="#d5e3df"
+            strokeWidth="1.2"
+            fill="none"
+          />
         </g>
 
-        {/* Right Arm (Viewer's Right) - Polite welcoming wave, matching thickness */}
+        {/* Right Arm (Viewer's Right) - Polite welcoming wave, short sleeve + bare waving forearm */}
         <g className="nurse-wave">
+          {/* Bare Forearm & Waving Hand (ผิวเนื้อ ท่อนแขนโบกมือทักทาย) */}
           <path
-            d="M 202 212 C 222 228 236 214 246 186"
+            d="M 218 226 C 228 222 237 208 246 186"
+            stroke="#f0d0c0"
+            strokeWidth="21"
+            strokeLinecap="round"
+            fill="none"
+          />
+          <path
+            d="M 218 226 C 228 222 237 208 246 186"
+            stroke="#fce8dc"
+            strokeWidth="18"
+            strokeLinecap="round"
+            fill="none"
+          />
+          {/* Right hand & thumb waving */}
+          <circle cx="248" cy="177" r="10.5" fill="#fce8dc" stroke="#f0d0c0" strokeWidth="1.2" />
+          <ellipse
+            cx="241"
+            cy="181"
+            rx="3.2"
+            ry="5.5"
+            transform="rotate(-28 241 181)"
+            fill="#fce8dc"
+            stroke="#f0d0c0"
+            strokeWidth="0.8"
+          />
+
+          {/* White Short Sleeve (เสื้อพยาบาลแขนสั้น คลุมต้นแขนขวา) */}
+          <path
+            d="M 202 210 C 210 216 215 220 218 226"
             stroke="#d5e3df"
-            strokeWidth="31"
+            strokeWidth="28"
             strokeLinecap="round"
             fill="none"
           />
           <path
-            d="M 202 212 C 222 228 236 214 246 186"
+            d="M 202 210 C 210 216 215 220 218 226"
             stroke="#ffffff"
-            strokeWidth="27"
+            strokeWidth="24"
             strokeLinecap="round"
             fill="none"
           />
-          {/* Right sleeve cuff */}
-          <ellipse cx="244" cy="191" rx="13" ry="6" transform="rotate(22 244 191)" fill="#f0f9f7" stroke="#cbdcd7" strokeWidth="1.5" />
-          {/* Right hand */}
-          <circle cx="249" cy="179" r="11.5" fill="#fce8dc" stroke="#f0d0c0" strokeWidth="1" />
+          {/* Right sleeve cuff hem (ขอบพับปลายแขนเสื้อพยาบาลสีขาว) */}
+          <ellipse
+            cx="218"
+            cy="226"
+            rx="13.5"
+            ry="5.5"
+            transform="rotate(28 218 226)"
+            fill="#ffffff"
+            stroke="#cbdcd7"
+            strokeWidth="1.6"
+          />
+          <path
+            d="M 207 221 Q 218 232 229 229"
+            stroke="#d5e3df"
+            strokeWidth="1.2"
+            fill="none"
+          />
         </g>
 
         {/* Slender, Tailored White Collared Nurse Uniform Torso */}
