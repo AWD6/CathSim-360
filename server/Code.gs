@@ -1,37 +1,53 @@
-// Bind this project to the private CathSim workbook. No access keys or HN/patient names belong in GitHub or Google Sheets.
+// Bind this project to the private CathSim workbook. Patient HN and full names are stored ONLY in ConfidentialIdentity for Admin and never exposed to patients.
 function setup() {
   const ss=SpreadsheetApp.getActiveSpreadsheet();
   const headers={
-    Accounts:['code','role','allowed_codes','secret_hash','enabled'],
+    Accounts:['code','role','allowed_codes','secret_hash','enabled','username'],
     Attempts:['id','participant_code','lesson','correct','seconds','mode','timestamp'],
     StepEvents:['id','participant_code','topic','step_index','trigger','seconds','timestamp','mode','actions'],
-    PatientSummary:['cs_id','last_learned_at','topics_learned','confirmed_steps','total_steps','score_percent','pass_status_80','learned_topics_list'],
+    PatientSummary:['cs_id','username','last_learned_at','topics_learned','confirmed_steps','total_steps','score_percent','pass_status_80','learned_topics_list'],
+    ConfidentialIdentity:['cs_id','hn','full_name','updated_at','confidential_policy'],
     Observations:['participant_code','lesson','observed_at','assessor_code','result','catheter_days','confirmed_cauti']
   };
   Object.keys(headers).forEach(name=>{const s=ss.getSheetByName(name)||ss.insertSheet(name);if(!s.getLastRow())s.appendRow(headers[name]);s.setFrozenRows(1);});
   PropertiesService.getScriptProperties().setProperty('SHEET_ID',ss.getId());
 }
 function digest_(s){return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,s).map(b=>('0'+(b&255).toString(16)).slice(-2)).join('');}
-// Run ONLY in the owner editor; returns a 256-bit-like random key or sets a custom PIN to give privately.
 function issueAccount(code,role,allowedCodes,customPin){
   if(!/^(CS-[A-Z0-9]{1,28}|[A-Z0-9-]{4,32})$/.test(code)||!['patient','caregiver','admin'].includes(role))throw Error('Invalid account');
   const s=book_().getSheetByName('Accounts');if(s.getDataRange().getValues().slice(1).some(r=>r[0]===code))throw Error('Account exists');
   const access=customPin?String(customPin):(Utilities.getUuid().replace(/-/g,'')+Utilities.getUuid().replace(/-/g,''));
-  s.appendRow([code,role,role==='patient'?code:allowedCodes.join(','),digest_(code+':'+access),true]);return {code:code,access:access};
+  s.appendRow([code,role,role==='patient'?code:allowedCodes.join(','),digest_(code+':'+access),true,code]);return {code:code,access:access};
 }
 function book_(){return SpreadsheetApp.openById(PropertiesService.getScriptProperties().getProperty('SHEET_ID'));}
 function rows_(name){const sh=book_().getSheetByName(name);return sh?sh.getDataRange().getValues().slice(1):[];}
-function account_(code){const a=rows_('Accounts').find(r=>r[0]===code&&r[4]===true);if(!a)throw Error('Access denied');return {code:a[0],role:a[1],allowed:String(a[2]).split(','),hash:a[3]};}
+function nextCsId_(){
+  let max=0;
+  rows_('Accounts').forEach(r=>{
+    const m=/^CS-(\d+)$/.exec(String(r[0]||'').trim().toUpperCase());
+    if(m){const n=Number(m[1]);if(Number.isFinite(n)&&n>max)max=n;}
+  });
+  return 'CS-'+(max+1);
+}
+function account_(code){const a=rows_('Accounts').find(r=>r[0]===code&&r[4]===true);if(!a)throw Error('Access denied');return {code:a[0],role:a[1],allowed:String(a[2]).split(','),hash:a[3],username:a[5]||a[0]};}
 function canRead_(a,code){return a.role==='admin'&&(a.allowed.includes('*')||a.allowed.includes(code));}
 function reports_(a){return rows_('Attempts').filter(r=>canRead_(a,r[1])).slice(-500).map(r=>({id:r[0],code:r[1],lesson:r[2],correct:r[3]===true,seconds:r[4],mode:r[5],time:r[6]}));}
 function events_(a,csFilter){const s=book_().getSheetByName('StepEvents');if(!s)return [];return s.getDataRange().getValues().slice(1).filter(r=>canRead_(a,r[1])&&(!csFilter||r[1]===csFilter)).slice(-2000).map(r=>({id:r[0],code:r[1],topic:r[2],step:r[3],trigger:r[4],seconds:r[5],time:r[6],mode:r[7]||'learn',actions:r[8]?JSON.parse(r[8]):[]}));}
 function patientEvents_(code){const s=book_().getSheetByName('StepEvents');if(!s)return [];return s.getDataRange().getValues().slice(1).filter(r=>r[1]===code).slice(-500).map(r=>({id:r[0],code:r[1],topic:r[2],step:r[3],trigger:r[4],seconds:r[5],time:r[6],mode:r[7]||'learn',actions:r[8]?JSON.parse(r[8]):[]}));}
+function confidentialLinks_(a){
+  if(!a||a.role!=='admin')return [];
+  const s=book_().getSheetByName('ConfidentialIdentity');
+  if(!s)return [];
+  return s.getDataRange().getValues().slice(1).filter(r=>canRead_(a,r[0])).map(r=>({csId:r[0],hn:r[1],fullName:r[2],updatedAt:r[3]}));
+}
 function updatePatientSummary_(code){
   try{
     const book=book_();if(!book.insertSheet)return;
     const limits={hands:3,hygiene:5,position:4,tube:3,secure:3,drain:5,change:5,followup:2,water:3,trouble:3};
     const totalSteps=36;
     const evs=patientEvents_(code);
+    const acc=rows_('Accounts').find(r=>r[0]===code);
+    const uname=acc&&acc[5]?String(acc[5]):code;
     const confirmedMap={},topicsSet={};
     let lastTime='';
     evs.forEach(e=>{
@@ -46,10 +62,10 @@ function updatePatientSummary_(code){
     const scorePercent=Math.round((confirmedCount/totalSteps)*100);
     const passStatus=scorePercent>=80?'PASS (>=80%)':'NEEDS_PRACTICE (<80%)';
     let sh=book.getSheetByName('PatientSummary');
-    if(!sh){sh=book.insertSheet('PatientSummary');sh.appendRow(['cs_id','last_learned_at','topics_learned','confirmed_steps','total_steps','score_percent','pass_status_80','learned_topics_list']);if(sh.setFrozenRows)sh.setFrozenRows(1);}
+    if(!sh){sh=book.insertSheet('PatientSummary');sh.appendRow(['cs_id','username','last_learned_at','topics_learned','confirmed_steps','total_steps','score_percent','pass_status_80','learned_topics_list']);if(sh.setFrozenRows)sh.setFrozenRows(1);}
     const allRows=sh.getDataRange().getValues();
     for(let i=allRows.length-1;i>0;i--){if(allRows[i][0]===code&&sh.deleteRow)sh.deleteRow(i+1);}
-    sh.appendRow([code,lastTime||new Date().toISOString(),topicsList.length+'/10',confirmedCount,totalSteps,scorePercent+'%',passStatus,topicsList.join(', ')]);
+    sh.appendRow([code,uname,lastTime||new Date().toISOString(),topicsList.length+'/10',confirmedCount,totalSteps,scorePercent+'%',passStatus,topicsList.join(', ')]);
   }catch(_){}
 }
 function doPost(e){
@@ -58,42 +74,83 @@ function doPost(e){
     const b=JSON.parse(e.postData.contents),cache=CacheService.getScriptCache();let a;
     if(b.action==='login'){
       if(typeof b.code!=='string'||typeof b.access!=='string')throw Error('Access denied');
-      const limit='login:'+digest_(b.code);const tries=Number(cache.get(limit)||0);if(tries>=10)throw Error('Try again later');cache.put(limit,String(tries+1),900);
-      a=account_(b.code);if(a.hash!==digest_(b.code+':'+b.access))throw Error('Access denied');cache.remove(limit);
+      const isAdminAttempt=b.code.startsWith('AD-');
+      const maxWrong=isAdminAttempt?2:10;
+      const limit='login:'+digest_(b.code);const tries=Number(cache.get(limit)||0);
+      if(tries>maxWrong)throw Error('Locked for 15 minutes');
+      a=account_(b.code);
+      if(a.hash!==digest_(b.code+':'+b.access)){
+        cache.put(limit,String(tries+1),900);
+        throw Error('Access denied');
+      }
+      cache.remove(limit);
       const token=Utilities.getUuid()+Utilities.getUuid();cache.put('session:'+digest_(token),a.code,3600);
-      return out_({ok:true,token:token,role:a.role,code:a.code,attempts:a.role==='admin'?reports_(a):[],events:a.role==='patient'?patientEvents_(a.code):[]});
+      return out_({ok:true,token:token,role:a.role,code:a.code,attempts:a.role==='admin'?reports_(a):[],events:a.role==='patient'?patientEvents_(a.code):[],confidentialLinks:a.role==='admin'?confidentialLinks_(a):[]});
+    }
+    if(b.action==='patientRegister'){
+      const uname=String(b.username||'').trim(),pin=String(b.access||'').trim();
+      if(uname.length<2||uname.length>40||pin.length<3||pin.length>64)throw Error('Invalid username or PIN');
+      const accSheet=book_().getSheetByName('Accounts');
+      const existingByUname=rows_('Accounts').find(r=>String(r[5]||'').toLowerCase()===uname.toLowerCase()||String(r[0]||'').toLowerCase()===uname.toLowerCase());
+      if(existingByUname)throw Error('Username already exists');
+      const assignedCode=nextCsId_();
+      accSheet.appendRow([assignedCode,'patient',assignedCode,digest_(assignedCode+':'+pin),true,uname]);
+      updatePatientSummary_(assignedCode);
+      const token=Utilities.getUuid()+Utilities.getUuid();cache.put('session:'+digest_(token),assignedCode,3600);
+      return out_({ok:true,token:token,role:'patient',code:assignedCode,username:uname,events:[]});
     }
     if(b.action==='patientLogin'){
       if(typeof b.code!=='string'||typeof b.access!=='string')throw Error('Access denied');
-      const code=b.code.trim().toUpperCase(),pin=b.access.trim();
-      if(!/^CS-[A-Z0-9]{1,28}$/.test(code)||pin.length<3||pin.length>64)throw Error('Invalid CS ID or PIN');
-      const limit='login:'+digest_(code);const tries=Number(cache.get(limit)||0);if(tries>=10)throw Error('Try again later');cache.put(limit,String(tries+1),900);
+      const rawIdentifier=b.code.trim(),pin=b.access.trim();
+      if(!rawIdentifier||pin.length<3||pin.length>64)throw Error('Invalid username or PIN');
+      const limit='login:'+digest_(rawIdentifier.toUpperCase());const tries=Number(cache.get(limit)||0);if(tries>=10)throw Error('Try again later');cache.put(limit,String(tries+1),900);
       const accSheet=book_().getSheetByName('Accounts');
-      const existing=rows_('Accounts').find(r=>r[0]===code);
+      const allAcc=rows_('Accounts');
+      const upperId=rawIdentifier.toUpperCase();
+      let existing=allAcc.find(r=>String(r[0]||'').toUpperCase()===upperId||(r[5]&&String(r[5]).toLowerCase()===rawIdentifier.toLowerCase()));
+      let resolvedCode=existing?String(existing[0]):upperId;
+      let resolvedUser=existing&&existing[5]?String(existing[5]):rawIdentifier;
       if(existing){
-        if(existing[4]!==true||existing[3]!==digest_(code+':'+pin))throw Error('Access denied');
+        if(existing[4]!==true||existing[3]!==digest_(resolvedCode+':'+pin))throw Error('Access denied');
       }else{
-        accSheet.appendRow([code,'patient',code,digest_(code+':'+pin),true]);
+        if(!/^CS-[A-Z0-9]{1,28}$/.test(upperId))resolvedCode=nextCsId_();
+        accSheet.appendRow([resolvedCode,'patient',resolvedCode,digest_(resolvedCode+':'+pin),true,resolvedUser]);
       }
       cache.remove(limit);
-      const token=Utilities.getUuid()+Utilities.getUuid();cache.put('session:'+digest_(token),code,3600);
-      return out_({ok:true,token:token,role:'patient',code:code,events:patientEvents_(code)});
+      const token=Utilities.getUuid()+Utilities.getUuid();cache.put('session:'+digest_(token),resolvedCode,3600);
+      return out_({ok:true,token:token,role:'patient',code:resolvedCode,username:resolvedUser,events:patientEvents_(resolvedCode)});
     }
     if(typeof b.token!=='string'||b.token.length>100)throw Error('Session expired');const code=cache.get('session:'+digest_(b.token));if(!code)throw Error('Session expired');a=account_(code);
     if(b.action==='report'){
       if(a.role!=='admin')throw Error('Access denied');
       const csFilter=typeof b.csId==='string'&&b.csId.trim()?b.csId.trim().toUpperCase():'';
-      return out_({ok:true,attempts:reports_(a),events:events_(a,csFilter)});
+      return out_({ok:true,attempts:reports_(a),events:events_(a,csFilter),confidentialLinks:confidentialLinks_(a)});
+    }
+    if(b.action==='linkPatientIdentity'){
+      if(a.role!=='admin')throw Error('Access denied');
+      const targetCs=String(b.csId||'').trim().toUpperCase();
+      const hn=String(b.hn||'').trim();
+      const fullName=String(b.fullName||'').trim();
+      if(!/^CS-[A-Z0-9]{1,28}$/.test(targetCs)||!hn||!fullName||hn.length>60||fullName.length>120)throw Error('Invalid link data');
+      const book=book_();
+      let sh=book.getSheetByName('ConfidentialIdentity');
+      if(!sh&&book.insertSheet){sh=book.insertSheet('ConfidentialIdentity');sh.appendRow(['cs_id','hn','full_name','updated_at','confidential_policy']);if(sh.setFrozenRows)sh.setFrozenRows(1);}
+      if(sh){
+        const all=sh.getDataRange().getValues();
+        for(let i=all.length-1;i>0;i--){if(all[i][0]===targetCs&&sh.deleteRow)sh.deleteRow(i+1);}
+        sh.appendRow([targetCs,hn,fullName,new Date().toISOString(),'CONFIDENTIAL_ADMIN_ONLY_DO_NOT_PUBLISH']);
+      }
+      return out_({ok:true,csId:targetCs,confidentialLinks:confidentialLinks_(a)});
     }
     if(b.action==='registerPatient'){
       if(a.role!=='admin')throw Error('Access denied');
-      const pCode=String(b.csId||'').trim().toUpperCase(),pPin=String(b.pin||'').trim();
+      const pCode=String(b.csId||'').trim().toUpperCase(),pPin=String(b.pin||'').trim(),pUser=String(b.username||pCode).trim();
       if(!/^CS-[A-Z0-9]{1,28}$/.test(pCode)||pPin.length<3||pPin.length>64)throw Error('Invalid CS ID or PIN');
       const accSheet=book_().getSheetByName('Accounts');
       const allAcc=accSheet.getDataRange().getValues();
       for(let i=allAcc.length-1;i>0;i--){if(allAcc[i][0]===pCode&&accSheet.deleteRow)accSheet.deleteRow(i+1);}
-      accSheet.appendRow([pCode,'patient',pCode,digest_(pCode+':'+pPin),true]);
-      return out_({ok:true,code:pCode});
+      accSheet.appendRow([pCode,'patient',pCode,digest_(pCode+':'+pPin),true,pUser]);
+      return out_({ok:true,code:pCode,username:pUser});
     }
     if(b.action==='deleteHistory'){if(a.role!=='admin')throw Error('Access denied');const lock=LockService.getScriptLock();lock.waitLock(10000);try{['Attempts','StepEvents'].forEach(name=>{const sh=book_().getSheetByName(name);if(!sh)return;const rows=sh.getDataRange().getValues();for(let i=rows.length-1;i>0;i--){if(a.allowed.includes('*')||a.allowed.includes(rows[i][1]))sh.deleteRow(i+1);}});}finally{lock.releaseLock();}return out_({ok:true});}
     if(b.action==='progress'){

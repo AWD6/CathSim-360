@@ -5,7 +5,13 @@ import {
   countdownTick,
   normalizeCsId,
   isValidCsId,
+  nextAvailableCsId,
   evaluatePatientProgress,
+  checkAdminLockout,
+  evaluateAdminPasswordAttempt,
+  formatLockoutRemaining,
+  ADMIN_MAX_WRONG_ATTEMPTS,
+  type AdminLockState,
   type StepEvent,
   type LearningMode
 } from './guided';
@@ -19,13 +25,21 @@ type Session = {
   token: string;
   role: 'patient' | 'caregiver' | 'admin';
   code: string;
+  username?: string;
 };
 
 type PatientAccountRecord = {
   csId: string;
+  username: string;
   pin: string;
-  adminNote: string;
   createdAt: string;
+};
+
+type ConfidentialPatientLink = {
+  csId: string;
+  hn: string;
+  fullName: string;
+  updatedAt: string;
 };
 
 const endpoint =
@@ -33,8 +47,9 @@ const endpoint =
   'https://script.google.com/macros/s/AKfycbwC6UwfNGzje7aW0EbOTXVEmOoI1l2vNko_PeBXfwurUGFXoAPiYlGA9NI4DT5tk38eBw/exec';
 
 const localKey = 'cathsim:guided-events:v4';
-const patientSessionKey = 'cathsim:patient-session:v1';
-const patientAccountsKey = 'cathsim:patient-accounts:v1';
+const patientAccountsKey = 'cathsim:patient-accounts:v2';
+const confidentialLinksKey = 'cathsim:admin-confidential-links:v1';
+const adminLockStorageKey = 'cathsim:admin-lock:v1';
 const media = (name: string) => `${import.meta.env.BASE_URL}media/${name}?v=8`;
 
 async function request(body: object) {
@@ -72,24 +87,33 @@ function mergeEvents(a: StepEvent[], b: StepEvent[]): StepEvent[] {
   return Array.from(map.values()).sort((x, y) => String(x.time).localeCompare(String(y.time)));
 }
 
-function loadPatientSession(): Session | null {
-  try {
-    const raw = JSON.parse(localStorage.getItem(patientSessionKey) || 'null');
-    if (raw && raw.role === 'patient' && typeof raw.code === 'string' && isValidCsId(raw.code)) {
-      return raw;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
 function loadPatientAccounts(): Record<string, PatientAccountRecord> {
   try {
     const raw = JSON.parse(localStorage.getItem(patientAccountsKey) || '{}');
     return raw && typeof raw === 'object' ? raw : {};
   } catch {
     return {};
+  }
+}
+
+function loadConfidentialLinks(): Record<string, ConfidentialPatientLink> {
+  try {
+    const raw = JSON.parse(localStorage.getItem(confidentialLinksKey) || '{}');
+    return raw && typeof raw === 'object' ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+function loadAdminLockState(): AdminLockState {
+  try {
+    const raw = JSON.parse(localStorage.getItem(adminLockStorageKey) || 'null');
+    if (raw && typeof raw.failedAttempts === 'number' && typeof raw.lockUntil === 'number') {
+      return raw;
+    }
+    return { failedAttempts: 0, lockUntil: 0 };
+  } catch {
+    return { failedAttempts: 0, lockUntil: 0 };
   }
 }
 
@@ -136,6 +160,57 @@ export function CatheterLogo() {
   );
 }
 
+// Minimal line icons used inside login fields (no emoji)
+function AuthIcon({ name }: { name: 'user' | 'lock' | 'id' | 'shield' | 'check' }) {
+  const common = {
+    width: 18,
+    height: 18,
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.8,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+    'aria-hidden': true,
+  };
+  switch (name) {
+    case 'user':
+      return (
+        <svg {...common}>
+          <circle cx="12" cy="8" r="4" />
+          <path d="M4 20c1.5-3.5 4.5-5 8-5s6.5 1.5 8 5" />
+        </svg>
+      );
+    case 'lock':
+      return (
+        <svg {...common}>
+          <rect x="5" y="11" width="14" height="9" rx="2" />
+          <path d="M8 11V8a4 4 0 0 1 8 0v3" />
+        </svg>
+      );
+    case 'id':
+      return (
+        <svg {...common}>
+          <rect x="3" y="5" width="18" height="14" rx="2" />
+          <circle cx="9" cy="12" r="2" />
+          <path d="M14 10h4M14 14h3" />
+        </svg>
+      );
+    case 'shield':
+      return (
+        <svg {...common}>
+          <path d="M12 3l7 3v5c0 4.5-3 8-7 10-4-2-7-5.5-7-10V6l7-3z" />
+        </svg>
+      );
+    default:
+      return (
+        <svg {...common}>
+          <path d="M5 12.5l4.5 4.5L19 7.5" />
+        </svg>
+      );
+  }
+}
+
 export default function Portal() {
   const [view, setView] = useState<'home' | 'lesson' | 'report' | 'sources'>('home');
   const [index, setIndex] = useState(0);
@@ -151,25 +226,35 @@ export default function Portal() {
 
   const [events, setEvents] = useState<StepEvent[]>(localEvents);
 
-  // Patient Login State (CS-1, CS-2, ... + PIN)
-  const [patientSession, setPatientSession] = useState<Session | null>(loadPatientSession);
-  const [patientCsInput, setPatientCsInput] = useState('');
+  // Mandatory Login Gate State (Forces login first for both User and Admin on open)
+  const [loginRoleTab, setLoginRoleTab] = useState<'patient' | 'admin'>('patient');
+  const [patientAuthMode, setPatientAuthMode] = useState<'login' | 'register'>('login');
+
+  // Patient Session & Credentials
+  const [patientSession, setPatientSession] = useState<Session | null>(null);
+  const [patientUsernameInput, setPatientUsernameInput] = useState('');
   const [patientPinInput, setPatientPinInput] = useState('');
   const [patientBusy, setPatientBusy] = useState(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'local'>('idle');
 
-  // Admin Session & CathReport Lookup State (Requires Admin Password + Patient CS ID)
+  // Admin Session, Lockout (>2 wrong attempts -> 15 min lock), and CS ID Lookup
   const [adminSession, setAdminSession] = useState<Session | null>(null);
   const [access, setAccess] = useState('');
   const [reportCsInput, setReportCsInput] = useState('CS-1');
   const [selectedCsId, setSelectedCsId] = useState('CS-1');
   const [busy, setBusy] = useState(false);
+  const [adminLockState, setAdminLockState] = useState<AdminLockState>(loadAdminLockState);
+  const [nowTick, setNowTick] = useState(() => Date.now());
 
-  // Admin Private Patient Account & Note Registry
+  // Patient Account Registry (CS-1, CS-2, ... + Username + PIN)
   const [patientAccounts, setPatientAccounts] = useState<Record<string, PatientAccountRecord>>(loadPatientAccounts);
-  const [newCsId, setNewCsId] = useState('');
-  const [newPin, setNewPin] = useState('');
-  const [newAdminNote, setNewAdminNote] = useState('');
+
+  // Admin-Only Confidential Link Registry (CS ID -> HN + ชื่อ - นามสกุล)
+  const [confidentialLinks, setConfidentialLinks] = useState<Record<string, ConfidentialPatientLink>>(loadConfidentialLinks);
+  const [linkCsIdInput, setLinkCsIdInput] = useState('CS-1');
+  const [linkHnInput, setLinkHnInput] = useState('');
+  const [linkFullNameInput, setLinkFullNameInput] = useState('');
+  const [linkBusy, setLinkBusy] = useState(false);
 
   const [mode, setMode] = useState<LearningMode>('learn');
   const [deleteConfirm, setDeleteConfirm] = useState(false);
@@ -179,7 +264,38 @@ export default function Portal() {
   const started = useRef(Date.now());
   const transitionLock = useRef(false);
   const generation = useRef(0);
-  const loginBoxRef = useRef<HTMLElement>(null);
+
+  // Whether the user has authenticated as either Patient or Admin
+  const isAuthenticated = Boolean(patientSession || adminSession);
+
+  // Live 1-second timer while Admin lockout is active
+  const adminLockCheck = useMemo(() => checkAdminLockout(adminLockState, nowTick), [adminLockState, nowTick]);
+
+  useEffect(() => {
+    if (!adminLockCheck.locked) return;
+    const timer = setInterval(() => {
+      const currentNow = Date.now();
+      setNowTick(currentNow);
+      const status = checkAdminLockout(adminLockState, currentNow);
+      if (!status.locked && adminLockState.lockUntil > 0) {
+        const cleared = { failedAttempts: 0, lockUntil: 0 };
+        setAdminLockState(cleared);
+        try {
+          localStorage.setItem(adminLockStorageKey, JSON.stringify(cleared));
+        } catch {}
+      }
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [adminLockCheck.locked, adminLockState]);
+
+  // Keep link inputs synced when selectedCsId changes
+  useEffect(() => {
+    const norm = normalizeCsId(selectedCsId || 'CS-1');
+    setLinkCsIdInput(norm);
+    const existingLink = confidentialLinks[norm];
+    setLinkHnInput(existingLink?.hn || '');
+    setLinkFullNameInput(existingLink?.fullName || '');
+  }, [selectedCsId, confidentialLinks]);
 
   // Set document title
   useEffect(() => {
@@ -231,23 +347,24 @@ export default function Portal() {
   const topic = topics[index];
   const current = topic?.steps[step];
 
-  const clip =
-    view === 'lesson'
-      ? finished
-        ? 'complete'
-        : mode === 'challenge'
-        ? `challenge-${topic.id}-${step}`
-        : `${topic.id}-${step}`
-      : view === 'home'
-      ? 'welcome'
-      : null;
+  // Only play voice clips after authenticated into Home or Lesson
+  const clip = !isAuthenticated
+    ? null
+    : view === 'lesson'
+    ? finished
+      ? 'complete'
+      : mode === 'challenge'
+      ? `challenge-${topic.id}-${step}`
+      : `${topic.id}-${step}`
+    : view === 'home' && patientSession
+    ? 'welcome'
+    : null;
 
-  // Practice mode allows clicking "ทำแล้ว" OR auto-advancing after 8 seconds
   const autoAdvance = mode === 'practice';
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
-  }, [view, index]);
+  }, [view, index, isAuthenticated]);
 
   const play = useCallback(() => {
     musicEnabled(true);
@@ -318,12 +435,126 @@ export default function Portal() {
     actions.current = [];
   }, [view, index, step, mode]);
 
-  // Patient Login Handler (CS-1, CS-2, ... + PIN)
-  const loginPatient = async () => {
-    const csId = normalizeCsId(patientCsInput);
+  // All known CS IDs across events, registered accounts, and confidential links
+  const allKnownCsIds = useMemo(() => {
+    const set = new Set<string>();
+    Object.keys(patientAccounts).forEach((k) => {
+      const norm = normalizeCsId(k);
+      if (isValidCsId(norm)) set.add(norm);
+    });
+    Object.keys(confidentialLinks).forEach((k) => {
+      const norm = normalizeCsId(k);
+      if (isValidCsId(norm)) set.add(norm);
+    });
+    events.forEach((e) => {
+      const norm = normalizeCsId(e.code);
+      if (isValidCsId(norm)) set.add(norm);
+    });
+    if (patientSession?.code) set.add(normalizeCsId(patientSession.code));
+    return Array.from(set).sort((a, b) => {
+      const na = Number(a.replace(/^CS-/, ''));
+      const nb = Number(b.replace(/^CS-/, ''));
+      if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
+      return a.localeCompare(b);
+    });
+  }, [patientAccounts, confidentialLinks, events, patientSession]);
+
+  // Preview of the next auto-generated CS-... code for new patient registration
+  const nextAutoCsId = useMemo(() => nextAvailableCsId(allKnownCsIds), [allKnownCsIds]);
+
+  // Patient Registration Handler: Patient chooses Username & PIN -> Auto-assigns CS-... and saves to Google Sheet
+  const registerPatientAccount = async () => {
+    const rawUser = patientUsernameInput.trim();
     const pin = patientPinInput.trim();
-    if (!isValidCsId(csId)) {
-      setNotice('กรุณากรอกรหัสผู้ป่วยในรูปแบบ CS-... เช่น CS-1, CS-2 (ห้ามใช้ชื่อหรือ HN ค่ะ)');
+    if (rawUser.length < 2) {
+      setNotice('กรุณากำหนดชื่อบัญชีผู้ใช้ (Username) อย่างน้อย 2 ตัวอักษรค่ะ');
+      return;
+    }
+    if (pin.length < 3) {
+      setNotice('กรุณากำหนดรหัส PIN อย่างน้อย 3–4 หลักค่ะ');
+      return;
+    }
+
+    // Check if username is already registered locally
+    const duplicate = Object.values(patientAccounts).find(
+      (acc) => acc.username.toLowerCase() === rawUser.toLowerCase() || acc.csId.toLowerCase() === rawUser.toLowerCase()
+    );
+    if (duplicate) {
+      setNotice(`บัญชีผู้ใช้ "${rawUser}" มีในระบบแล้ว (${duplicate.csId}) กรุณากดเข้าสู่ระบบด้วยรหัส PIN ค่ะ`);
+      setPatientAuthMode('login');
+      return;
+    }
+
+    const fallbackCsId = nextAvailableCsId(Object.keys(patientAccounts).concat(events.map((e) => e.code)));
+    setPatientBusy(true);
+    setSyncStatus('syncing');
+
+    try {
+      const res = await request({ action: 'patientRegister', username: rawUser, access: pin });
+      const assignedCsId = normalizeCsId(res.code || fallbackCsId);
+      const sess: Session = { token: res.token, role: 'patient', code: assignedCsId, username: rawUser };
+      setPatientSession(sess);
+
+      const nextAccounts: Record<string, PatientAccountRecord> = {
+        ...patientAccounts,
+        [assignedCsId]: {
+          csId: assignedCsId,
+          username: rawUser,
+          pin,
+          createdAt: new Date().toISOString()
+        }
+      };
+      setPatientAccounts(nextAccounts);
+      try {
+        localStorage.setItem(patientAccountsKey, JSON.stringify(nextAccounts));
+      } catch {}
+
+      setSyncStatus('synced');
+      setPatientPinInput('');
+      setReportCsInput(assignedCsId);
+      setSelectedCsId(assignedCsId);
+      setView('home');
+      setNotice(`สมัครบัญชีสำเร็จ! รหัสผู้ป่วยของคุณคือ ${assignedCsId} (เชื่อมข้อมูลเข้า Google Sheet อัตโนมัติแล้วค่ะ)`);
+    } catch {
+      // Fallback: Assign next sequential CS-... locally and queue sync to Google Sheet
+      const assignedCsId = fallbackCsId;
+      const sess: Session = { token: `local-patient-${assignedCsId}`, role: 'patient', code: assignedCsId, username: rawUser };
+      setPatientSession(sess);
+
+      const nextAccounts: Record<string, PatientAccountRecord> = {
+        ...patientAccounts,
+        [assignedCsId]: {
+          csId: assignedCsId,
+          username: rawUser,
+          pin,
+          createdAt: new Date().toISOString()
+        }
+      };
+      setPatientAccounts(nextAccounts);
+      try {
+        localStorage.setItem(patientAccountsKey, JSON.stringify(nextAccounts));
+      } catch {}
+
+      // Also attempt patientLogin with assignedCsId to register it in Google Sheet if endpoint is reachable
+      void request({ action: 'patientLogin', code: assignedCsId, access: pin }).catch(() => {});
+
+      setSyncStatus('local');
+      setPatientPinInput('');
+      setReportCsInput(assignedCsId);
+      setSelectedCsId(assignedCsId);
+      setView('home');
+      setNotice(`สมัครบัญชีสำเร็จ! รหัสผู้ป่วยของคุณคือ ${assignedCsId} ค่ะ`);
+    } finally {
+      setPatientBusy(false);
+    }
+  };
+
+  // Patient Login Handler: Login with Username (or CS-...) and PIN
+  const loginPatient = async () => {
+    const rawUser = patientUsernameInput.trim();
+    const pin = patientPinInput.trim();
+    if (!rawUser) {
+      setNotice('กรุณากรอกบัญชีผู้ใช้ (Username) ค่ะ');
       return;
     }
     if (pin.length < 3) {
@@ -331,33 +562,49 @@ export default function Portal() {
       return;
     }
 
-    // Check local account registry if PIN was already set on this device
-    const existingLocal = patientAccounts[csId];
-    if (existingLocal && existingLocal.pin && existingLocal.pin !== pin) {
-      setNotice(`รหัส PIN สำหรับ ${csId} ไม่ถูกต้อง กรุณาตรวจสอบอีกครั้งค่ะ`);
+    // Find matching local account by Username or CS ID
+    const matchedLocal = Object.values(patientAccounts).find(
+      (acc) =>
+        acc.username.toLowerCase() === rawUser.toLowerCase() ||
+        acc.csId.toLowerCase() === rawUser.toLowerCase() ||
+        acc.csId.toLowerCase() === normalizeCsId(rawUser).toLowerCase()
+    );
+
+    if (matchedLocal && matchedLocal.pin && matchedLocal.pin !== pin) {
+      setNotice('รหัส PIN ไม่ถูกต้อง กรุณาตรวจสอบอีกครั้งค่ะ');
       return;
     }
+
+    const targetCode = matchedLocal
+      ? matchedLocal.csId
+      : /^cs-?\d+$/i.test(rawUser) || /^\d+$/.test(rawUser)
+      ? normalizeCsId(rawUser)
+      : nextAvailableCsId(Object.keys(patientAccounts).concat(events.map((e) => e.code)));
+
+    const resolvedUsername = matchedLocal ? matchedLocal.username : rawUser;
 
     setPatientBusy(true);
     setSyncStatus('syncing');
     try {
-      const res = await request({ action: 'patientLogin', code: csId, access: pin });
-      const sess: Session = { token: res.token, role: 'patient', code: csId };
+      const res = await request({ action: 'patientLogin', code: targetCode, access: pin });
+      const finalCsId = normalizeCsId(res.code || targetCode);
+      const finalUsername = res.username || resolvedUsername;
+      const sess: Session = { token: res.token, role: 'patient', code: finalCsId, username: finalUsername };
       setPatientSession(sess);
-      localStorage.setItem(patientSessionKey, JSON.stringify(sess));
 
-      // Save account locally as well
-      const nextAccounts = {
+      const nextAccounts: Record<string, PatientAccountRecord> = {
         ...patientAccounts,
-        [csId]: {
-          csId,
+        [finalCsId]: {
+          csId: finalCsId,
+          username: finalUsername,
           pin,
-          adminNote: existingLocal?.adminNote || '',
-          createdAt: existingLocal?.createdAt || new Date().toISOString()
+          createdAt: matchedLocal?.createdAt || new Date().toISOString()
         }
       };
       setPatientAccounts(nextAccounts);
-      localStorage.setItem(patientAccountsKey, JSON.stringify(nextAccounts));
+      try {
+        localStorage.setItem(patientAccountsKey, JSON.stringify(nextAccounts));
+      } catch {}
 
       if (Array.isArray(res.events) && res.events.length > 0) {
         setEvents((prev) => {
@@ -369,60 +616,56 @@ export default function Portal() {
         });
       }
 
-      // Sync any existing local events for this CS ID up to Google Sheet
-      const pendingForPatient = localEvents().filter((e) => normalizeCsId(e.code) === csId);
+      const pendingForPatient = localEvents().filter((e) => normalizeCsId(e.code) === finalCsId);
       for (const ev of pendingForPatient.slice(-50)) {
-        await request({ action: 'progress', token: res.token, event: { ...ev, code: csId } }).catch(() => {});
+        await request({ action: 'progress', token: res.token, event: { ...ev, code: finalCsId } }).catch(() => {});
       }
 
       setSyncStatus('synced');
       setPatientPinInput('');
-      setReportCsInput(csId);
-      setSelectedCsId(csId);
-      setNotice(`เข้าสู่ระบบรหัสผู้ป่วย ${csId} และเชื่อมต่อ Google Sheet เรียบร้อยแล้วค่ะ`);
+      setReportCsInput(finalCsId);
+      setSelectedCsId(finalCsId);
+      setView('home');
+      setNotice(`เข้าสู่ระบบสำเร็จ! รหัสผู้ป่วยของคุณคือ ${finalCsId} ค่ะ`);
     } catch {
-      // Fallback: Local session with automatic Google Sheet backup queue
-      const sess: Session = { token: `local-patient-${csId}`, role: 'patient', code: csId };
+      const sess: Session = { token: `local-patient-${targetCode}`, role: 'patient', code: targetCode, username: resolvedUsername };
       setPatientSession(sess);
-      localStorage.setItem(patientSessionKey, JSON.stringify(sess));
 
-      const nextAccounts = {
+      const nextAccounts: Record<string, PatientAccountRecord> = {
         ...patientAccounts,
-        [csId]: {
-          csId,
+        [targetCode]: {
+          csId: targetCode,
+          username: resolvedUsername,
           pin,
-          adminNote: existingLocal?.adminNote || '',
-          createdAt: existingLocal?.createdAt || new Date().toISOString()
+          createdAt: matchedLocal?.createdAt || new Date().toISOString()
         }
       };
       setPatientAccounts(nextAccounts);
-      localStorage.setItem(patientAccountsKey, JSON.stringify(nextAccounts));
+      try {
+        localStorage.setItem(patientAccountsKey, JSON.stringify(nextAccounts));
+      } catch {}
 
       setSyncStatus('local');
       setPatientPinInput('');
-      setReportCsInput(csId);
-      setSelectedCsId(csId);
-      setNotice(`เข้าสู่ระบบรหัสผู้ป่วย ${csId} เรียบร้อยแล้วค่ะ (บันทึกและสำรองข้อมูลอัตโนมัติ)`);
+      setReportCsInput(targetCode);
+      setSelectedCsId(targetCode);
+      setView('home');
+      setNotice(`เข้าสู่ระบบสำเร็จ! รหัสผู้ป่วยของคุณคือ ${targetCode} ค่ะ`);
     } finally {
       setPatientBusy(false);
     }
   };
 
-  const logoutPatient = () => {
+  const logoutAll = () => {
+    audio.current?.pause();
     setPatientSession(null);
+    setAdminSession(null);
     setSyncStatus('idle');
-    try {
-      localStorage.removeItem(patientSessionKey);
-    } catch {}
-    setNotice('ออกจากระบบผู้ป่วยเรียบร้อยแล้วค่ะ สามารถเข้าสู่ระบบด้วยรหัส CS-... ใหม่ได้ค่ะ');
+    setView('home');
+    setNotice('ออกจากระบบเรียบร้อยแล้วค่ะ กรุณาเข้าสู่ระบบก่อนใช้งาน');
   };
 
   const openLesson = (i: number) => {
-    if (!patientSession) {
-      setNotice('กรุณาเข้าสู่ระบบผู้ป่วยด้วยรหัส CS-... (เช่น CS-1) และ PIN ก่อนเริ่มบทเรียน เพื่อบันทึกคะแนนและสำรองข้อมูลค่ะ');
-      loginBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return;
-    }
     setIndex(i);
     setStep(0);
     setFinished(false);
@@ -503,37 +746,36 @@ export default function Portal() {
 
   const navigate = (v: typeof view) => {
     audio.current?.pause();
+    if (!isAuthenticated) {
+      if (v === 'report') {
+        setLoginRoleTab('admin');
+      } else {
+        setLoginRoleTab('patient');
+      }
+      return;
+    }
     setView(v);
     setPaused(false);
   };
 
-  // All known CS IDs across events and registered accounts
-  const allKnownCsIds = useMemo(() => {
-    const set = new Set<string>();
-    Object.keys(patientAccounts).forEach((k) => {
-      const norm = normalizeCsId(k);
-      if (isValidCsId(norm)) set.add(norm);
-    });
-    events.forEach((e) => {
-      const norm = normalizeCsId(e.code);
-      if (isValidCsId(norm)) set.add(norm);
-    });
-    if (patientSession?.code) set.add(normalizeCsId(patientSession.code));
-    if (set.size === 0) set.add('CS-1');
-    return Array.from(set).sort((a, b) => {
-      const na = Number(a.replace(/^CS-/, ''));
-      const nb = Number(b.replace(/^CS-/, ''));
-      if (Number.isFinite(na) && Number.isFinite(nb) && na !== nb) return na - nb;
-      return a.localeCompare(b);
-    });
-  }, [patientAccounts, events, patientSession]);
-
-  // Admin login via password "dmknj" + Patient CS ID
+  // Admin Login Handler: Requires password "dmknj" + CS ID; wrong > 2 times locks system for 15 minutes
   const loginAdmin = async () => {
+    const now = Date.now();
+    setNowTick(now);
+    const currentCheck = checkAdminLockout(adminLockState, now);
+    if (currentCheck.locked) {
+      setNotice(
+        `กรอกรหัส admin ผิดเกิน ${ADMIN_MAX_WRONG_ATTEMPTS} ครั้ง ระบบถูกล็อค 15 นาที (เหลือเวลา ${formatLockoutRemaining(
+          currentCheck.remainingSeconds
+        )} นาที)`
+      );
+      return;
+    }
+
     const trimmed = access.trim();
     const targetCs = normalizeCsId(reportCsInput || 'CS-1');
     if (!trimmed) {
-      setNotice('กรุณากรอกรหัสผู้ดูแลระบบ (Admin Password) ค่ะ');
+      setNotice('กรุณากรอกรหัส admin ค่ะ');
       return;
     }
     if (!isValidCsId(targetCs)) {
@@ -541,92 +783,99 @@ export default function Portal() {
       return;
     }
 
-    if (trimmed.toLowerCase() === 'dmknj') {
+    const isDmknj = trimmed.toLowerCase() === 'dmknj';
+    if (isDmknj) {
+      const attemptResult = evaluateAdminPasswordAttempt(adminLockState, true, now);
+      setAdminLockState(attemptResult.state);
+      try {
+        localStorage.setItem(adminLockStorageKey, JSON.stringify(attemptResult.state));
+      } catch {}
+
       setAdminSession({ token: 'local-admin-dmknj', role: 'admin', code: 'ADMIN' });
       setSelectedCsId(targetCs);
       setReportCsInput(targetCs);
+      setLinkCsIdInput(targetCs);
       setEvents(localEvents());
       setAccess('');
-      setNotice(`เข้าสู่ระบบ CathReport (Admin) และเปิดรายงานของ ${targetCs} เรียบร้อยแล้วค่ะ`);
+      setView('report');
+      setNotice(`เข้าสู่ระบบสำหรับ admin และเปิดดูข้อมูลของ ${targetCs} เรียบร้อยแล้วค่ะ`);
       return;
     }
 
-    setBusy(true);
+    // Wrong password attempt -> evaluate lockout (> 2 wrong attempts locks for 15 minutes)
+    const wrongResult = evaluateAdminPasswordAttempt(adminLockState, false, now);
+    setAdminLockState(wrongResult.state);
+    setNowTick(now);
     try {
-      const auth = await request({ action: 'login', code: 'AD-OWNER01', access: trimmed });
-      const history = auth.role === 'admin' ? await request({ action: 'report', token: auth.token }) : { events: [] };
-      const merged = mergeEvents(localEvents(), history.events || []);
-      setAdminSession({ token: auth.token, role: auth.role, code: 'ADMIN' });
-      setSelectedCsId(targetCs);
-      setReportCsInput(targetCs);
-      setEvents(merged);
-      try {
-        localStorage.setItem(localKey, JSON.stringify(merged));
-      } catch {}
-      setAccess('');
-      setNotice(`เข้าสู่ระบบ CathReport (Admin) และซิงค์ข้อมูลจาก Google Sheet สำหรับ ${targetCs} เรียบร้อยแล้วค่ะ`);
-    } catch {
-      setNotice('รหัสผ่าน Admin ไม่ถูกต้อง กรุณากรอกรหัสผ่านอีกครั้งค่ะ');
-    } finally {
-      setBusy(false);
+      localStorage.setItem(adminLockStorageKey, JSON.stringify(wrongResult.state));
+    } catch {}
+    setAccess('');
+
+    if (wrongResult.locked) {
+      setNotice(
+        `กรอกรหัส admin ผิดเกิน ${ADMIN_MAX_WRONG_ATTEMPTS} ครั้ง ระบบถูกล็อคเป็นเวลา 15 นาที (เหลือเวลา ${formatLockoutRemaining(
+          wrongResult.remainingSeconds
+        )} นาที)`
+      );
+    } else {
+      setNotice(
+        `รหัส admin ไม่ถูกต้อง (ผิดครั้งที่ ${wrongResult.state.failedAttempts}/${ADMIN_MAX_WRONG_ATTEMPTS}) หากผิดเกิน ${ADMIN_MAX_WRONG_ATTEMPTS} ครั้ง ระบบจะล็อค 15 นาทีค่ะ`
+      );
     }
   };
 
-  // Admin creates or updates a Patient CS ID + PIN + Private Admin Note
-  const savePatientAccountByAdmin = async () => {
-    const csId = normalizeCsId(newCsId);
-    const pin = newPin.trim();
-    const note = newAdminNote.trim();
+  // Admin Confidential Identity Linking: CS ID -> HN + ชื่อ - นามสกุล (Saved confidentially to Google Sheet, never published)
+  const saveConfidentialLink = async () => {
+    const csId = normalizeCsId(linkCsIdInput);
+    const hn = linkHnInput.trim();
+    const fullName = linkFullNameInput.trim();
     if (!isValidCsId(csId)) {
-      setNotice('กรุณาระบุรหัสผู้ป่วยในรูปแบบ CS-... เช่น CS-1, CS-2 ค่ะ');
+      setNotice('กรุณากรอกรหัส CS ID ในรูปแบบ CS-... เช่น CS-1, CS-2 ค่ะ');
       return;
     }
-    if (pin.length < 3) {
-      setNotice('กรุณากำหนดรหัส PIN สำหรับผู้ป่วยอย่างน้อย 3–4 หลักค่ะ');
+    if (!hn) {
+      setNotice('กรุณากรอก HN ของผู้ป่วยค่ะ');
+      return;
+    }
+    if (!fullName) {
+      setNotice('กรุณากรอก ชื่อ - นามสกุล ของผู้ป่วยค่ะ');
       return;
     }
 
-    const updated: Record<string, PatientAccountRecord> = {
-      ...patientAccounts,
-      [csId]: {
-        csId,
-        pin,
-        adminNote: note,
-        createdAt: patientAccounts[csId]?.createdAt || new Date().toISOString()
+    setLinkBusy(true);
+    try {
+      const updated: Record<string, ConfidentialPatientLink> = {
+        ...confidentialLinks,
+        [csId]: {
+          csId,
+          hn,
+          fullName,
+          updatedAt: new Date().toISOString()
+        }
+      };
+      setConfidentialLinks(updated);
+      try {
+        localStorage.setItem(confidentialLinksKey, JSON.stringify(updated));
+      } catch {}
+
+      if (adminSession && !adminSession.token.startsWith('local-admin-')) {
+        await request({
+          action: 'linkPatientIdentity',
+          token: adminSession.token,
+          csId,
+          hn,
+          fullName
+        }).catch(() => {});
       }
-    };
-    setPatientAccounts(updated);
-    try {
-      localStorage.setItem(patientAccountsKey, JSON.stringify(updated));
-    } catch {}
 
-    if (adminSession && !adminSession.token.startsWith('local-admin-')) {
-      await request({ action: 'registerPatient', token: adminSession.token, csId, pin }).catch(() => {});
+      setSelectedCsId(csId);
+      setReportCsInput(csId);
+      setNotice(
+        `เชื่อมโยงรหัส ${csId} กับข้อมูล HN และ ชื่อ - นามสกุล เก็บเป็นความลับไว้ที่ Google Sheet เรียบร้อยแล้วค่ะ (ห้ามเผยแพร่)`
+      );
+    } finally {
+      setLinkBusy(false);
     }
-
-    setSelectedCsId(csId);
-    setReportCsInput(csId);
-    setNewCsId('');
-    setNewPin('');
-    setNewAdminNote('');
-    setNotice(`บันทึกรหัสผู้ป่วย ${csId} พร้อม PIN เรียบร้อยแล้วค่ะ`);
-  };
-
-  const updateAdminNoteForSelected = (csId: string, note: string) => {
-    const existing = patientAccounts[csId] || {
-      csId,
-      pin: '1234',
-      adminNote: '',
-      createdAt: new Date().toISOString()
-    };
-    const updated = {
-      ...patientAccounts,
-      [csId]: { ...existing, adminNote: note }
-    };
-    setPatientAccounts(updated);
-    try {
-      localStorage.setItem(patientAccountsKey, JSON.stringify(updated));
-    } catch {}
   };
 
   // Active patient's own evaluation (for Patient Status Bar and Topic Cards)
@@ -642,10 +891,10 @@ export default function Portal() {
   );
 
   // All patients summary evaluations for Admin overview table
-  const allPatientReports = useMemo(
-    () => allKnownCsIds.map((id) => evaluatePatientProgress(events, id)),
-    [allKnownCsIds, events]
-  );
+  const allPatientReports = useMemo(() => {
+    const ids = allKnownCsIds.length > 0 ? allKnownCsIds : ['CS-1'];
+    return ids.map((id) => evaluatePatientProgress(events, id));
+  }, [allKnownCsIds, events]);
 
   const selectedCsEvents = useMemo(
     () => events.filter((e) => normalizeCsId(e.code) === normalizeCsId(selectedCsId)),
@@ -656,7 +905,9 @@ export default function Portal() {
     const summaryRows = [
       [
         'cs_id',
-        'admin_private_note',
+        'username',
+        'confidential_hn',
+        'confidential_full_name',
         'topics_learned',
         'confirmed_steps',
         'total_steps',
@@ -668,7 +919,9 @@ export default function Portal() {
       ],
       ...allPatientReports.map((r) => [
         r.csId,
-        patientAccounts[r.csId]?.adminNote || '',
+        patientAccounts[r.csId]?.username || r.csId,
+        confidentialLinks[r.csId]?.hn || '',
+        confidentialLinks[r.csId]?.fullName || '',
         `${r.topicsLearned}/${r.totalTopics}`,
         String(r.confirmedSteps),
         String(r.totalSteps),
@@ -691,7 +944,7 @@ export default function Portal() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `cathsim-report-${normalizeCsId(selectedCsId)}.csv`;
+    a.download = `cathsim-confidential-report-${normalizeCsId(selectedCsId)}.csv`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
@@ -700,8 +953,10 @@ export default function Portal() {
     if (adminSession?.role !== 'admin') return;
     const payload = {
       generatedAt: new Date().toISOString(),
+      confidentialNotice: 'CONFIDENTIAL_ADMIN_ONLY_DO_NOT_PUBLISH',
       passCriteriaPercent: 80,
       selectedCsId: selectedPatientReport,
+      confidentialIdentityLinks: confidentialLinks,
       allPatientsSummary: allPatientReports,
       rawEvents: events
     };
@@ -709,7 +964,7 @@ export default function Portal() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'cathsim-report.json';
+    a.download = 'cathsim-confidential-report.json';
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
@@ -729,6 +984,89 @@ export default function Portal() {
       setBusy(false);
     }
   };
+
+  // Reusable Admin Login Form (Used both in Mandatory Login Gate and CathReport tab)
+  const renderAdminLoginForm = () => (
+    <div className="admin-auth-panel">
+      <div className="auth-heading">
+        <h2>เข้าสู่ระบบสำหรับ admin</h2>
+        <p className="auth-subtext">กรอกรหัส admin และ CS ID เพื่อดูข้อมูลผู้ป่วยรายบุคคล</p>
+      </div>
+
+      {adminLockCheck.locked && (
+        <div className="admin-lockout-banner" role="alert">
+          <strong>ระบบถูกล็อคชั่วคราว 15 นาที</strong>
+          <span>
+            คุณกรอกรหัส admin ผิดเกิน {ADMIN_MAX_WRONG_ATTEMPTS} ครั้ง กรุณารออีก{' '}
+            <code>{formatLockoutRemaining(adminLockCheck.remainingSeconds)}</code> นาที จึงจะสามารถลองใหม่ได้ค่ะ
+          </span>
+        </div>
+      )}
+
+      {!adminLockCheck.locked && adminLockState.failedAttempts > 0 && (
+        <div className="admin-warning-banner" role="status">
+          รหัส admin ไม่ถูกต้อง ({adminLockState.failedAttempts}/{ADMIN_MAX_WRONG_ATTEMPTS} ครั้ง) · หากผิดเกิน{' '}
+          {ADMIN_MAX_WRONG_ATTEMPTS} ครั้ง ระบบจะล็อค 15 นาที
+        </div>
+      )}
+
+      <div className="auth-fields-stack">
+        <label className="auth-field">
+          <span className="auth-label">รหัส admin</span>
+          <span className="auth-input-wrap">
+          <AuthIcon name="lock" />
+          <input
+            type="password"
+            value={access}
+            disabled={adminLockCheck.locked}
+            autoComplete="off"
+            placeholder="กรอกรหัส admin"
+            onChange={(e) => setAccess(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !adminLockCheck.locked) {
+                void loginAdmin();
+              }
+            }}
+          />
+          </span>
+        </label>
+        <label className="auth-field">
+          <span className="auth-label">CS ID ของผู้ป่วย</span>
+          <span className="auth-input-wrap">
+          <AuthIcon name="id" />
+          <input
+            type="text"
+            value={reportCsInput}
+            disabled={adminLockCheck.locked}
+            autoComplete="off"
+            placeholder="เช่น CS-1, CS-2"
+            onChange={(e) => setReportCsInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !adminLockCheck.locked) {
+                void loginAdmin();
+              }
+            }}
+          />
+          </span>
+        </label>
+        <button
+          className="portal-primary auth-submit-btn"
+          disabled={busy || adminLockCheck.locked || !access.trim() || !reportCsInput.trim()}
+          onClick={loginAdmin}
+        >
+          {adminLockCheck.locked
+            ? `ระบบถูกล็อค (${formatLockoutRemaining(adminLockCheck.remainingSeconds)})`
+            : busy
+            ? 'กำลังตรวจสอบ…'
+            : 'เข้าสู่ระบบ'}
+        </button>
+      </div>
+      <p className="auth-footnote">
+        <AuthIcon name="shield" />
+        ข้อมูล HN และชื่อ-นามสกุล เก็บเป็นความลับใน Google Sheet เฉพาะ admin
+      </p>
+    </div>
+  );
 
   return (
     <div className="portal guided-app">
@@ -756,7 +1094,7 @@ export default function Portal() {
         }}
       />
 
-      {/* Minimalist Header (Requirement 7) */}
+      {/* Minimalist Header */}
       <header className="portal-header">
         <a
           href="#"
@@ -779,18 +1117,27 @@ export default function Portal() {
         </div>
       </header>
 
-      {/* Main Navigation Bar (Only 3 tabs in exact order, CathReport on far right) */}
+      {/* Main Navigation Bar */}
       <nav className="portal-nav" role="navigation" aria-label="เมนูหลัก">
         <div className="nav-left-group">
-          <button className={view === 'home' || view === 'lesson' ? 'active-nav' : ''} onClick={() => navigate('home')}>
+          <button
+            className={isAuthenticated && (view === 'home' || view === 'lesson') ? 'active-nav' : ''}
+            onClick={() => navigate('home')}
+          >
             ดูสาธิตและทำไปด้วยกัน
           </button>
-          <button className={view === 'sources' ? 'active-nav' : ''} onClick={() => navigate('sources')}>
+          <button
+            className={isAuthenticated && view === 'sources' ? 'active-nav' : ''}
+            onClick={() => navigate('sources')}
+          >
             แหล่งอ้างอิงและแนวทางดูแล
           </button>
         </div>
         <div className="nav-right-group">
-          <button className={view === 'report' ? 'active-nav' : ''} onClick={() => navigate('report')}>
+          <button
+            className={(isAuthenticated && view === 'report') || (!isAuthenticated && loginRoleTab === 'admin') ? 'active-nav' : ''}
+            onClick={() => navigate('report')}
+          >
             CathReport
           </button>
         </div>
@@ -798,118 +1145,6 @@ export default function Portal() {
 
       {/* Application Content Shell */}
       <main className="portal-main">
-        {/* Patient Identity & Progress Status Bar (Shown on Home & Lesson views) */}
-        {(view === 'home' || view === 'lesson') && (
-          <section ref={loginBoxRef} className="patient-auth-bar" aria-label="ข้อมูลการเข้าสู่ระบบผู้ป่วย">
-            {!patientSession ? (
-              <div className="patient-login-card">
-                <div className="patient-login-copy">
-                  <span className="gentle-label">เข้าสู่ระบบสำหรับผู้ป่วย (คุ้มครองข้อมูลส่วนบุคคล)</span>
-                  <h2>เข้าสู่ระบบด้วยรหัส CS-... และ PIN เฉพาะรายบุคคล</h2>
-                  <p>
-                    ใช้รหัสสมมติ เช่น <strong>CS-1</strong>, <strong>CS-2</strong> คู่กับรหัส <strong>PIN</strong>{' '}
-                    โดยไม่ระบุ HN หรือชื่อ-นามสกุลจริงในระบบ เพื่อบันทึกผลการเรียนรู้และสำรองข้อมูลขึ้น Google Sheet (เกณฑ์ผ่าน: ทำทุกอย่างได้เอง ≥ 80%)
-                  </p>
-                </div>
-                <div className="patient-login-form">
-                  <label>
-                    Username (รหัสผู้ป่วย เช่น CS-1, CS-2)
-                    <input
-                      type="text"
-                      value={patientCsInput}
-                      placeholder="เช่น CS-1 หรือ CS-2"
-                      autoComplete="off"
-                      onChange={(e) => setPatientCsInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') void loginPatient();
-                      }}
-                    />
-                  </label>
-                  <label>
-                    PIN (รหัสผ่านประจำตัวผู้ป่วย)
-                    <input
-                      type="password"
-                      value={patientPinInput}
-                      placeholder="กรอกรหัส PIN"
-                      autoComplete="off"
-                      onChange={(e) => setPatientPinInput(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') void loginPatient();
-                      }}
-                    />
-                  </label>
-                  <button
-                    className="portal-primary patient-login-submit"
-                    disabled={patientBusy || !patientCsInput.trim() || !patientPinInput.trim()}
-                    onClick={loginPatient}
-                  >
-                    {patientBusy ? 'กำลังเชื่อมต่อ Google Sheet…' : 'เข้าสู่ระบบผู้ป่วย · เริ่มบันทึกผลการเรียนรู้'}
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div className="patient-active-strip">
-                <div className="patient-active-info">
-                  <span className="cs-id-pill">รหัสผู้ป่วย: {patientSession.code}</span>
-                  {currentPatientReport && (
-                    <>
-                      <span className="patient-stat-pill">
-                        เรียนแล้ว {currentPatientReport.topicsLearned}/{currentPatientReport.totalTopics} เรื่อง
-                      </span>
-                      <span className="patient-stat-pill">
-                        ทำได้เอง {currentPatientReport.confirmedSteps}/{currentPatientReport.totalSteps} ขั้น ({currentPatientReport.overallScorePercent}%)
-                      </span>
-                      <span className={`pass-criteria-pill ${currentPatientReport.passed80 ? 'pass' : 'pending'}`}>
-                        {currentPatientReport.passed80
-                          ? 'ผ่านเกณฑ์ (≥ 80%)'
-                          : 'เป้าหมาย: ทำได้เอง ≥ 80%'}
-                      </span>
-                    </>
-                  )}
-                  <span className="sync-badge">
-                    {syncStatus === 'syncing'
-                      ? 'กำลังสำรองข้อมูลขึ้น Google Sheet…'
-                      : 'สำรองข้อมูล Google Sheet อัตโนมัติ'}
-                  </span>
-                </div>
-                <button className="patient-logout-btn" onClick={logoutPatient}>
-                  สลับรหัส / ออกจากระบบ
-                </button>
-              </div>
-            )}
-          </section>
-        )}
-
-        {/* Learning Mode Bar (Distinct Learn, Practice, Challenge) */}
-        <div className="experience-bar">
-          <div className="mode-switch" aria-label="โหมดการเรียนรู้">
-            {(['learn', 'practice', 'challenge'] as LearningMode[]).map((m) => (
-              <button
-                key={m}
-                className={mode === m ? 'selected' : ''}
-                onClick={() => {
-                  setMode(m);
-                  setPaused(false);
-                  setLeft(8);
-                }}
-              >
-                {m === 'learn'
-                  ? 'CathLearn · ดูสาธิต'
-                  : m === 'practice'
-                  ? 'CathPractice · ฝึกทำ'
-                  : 'CathChallenge · ลองเอง'}
-              </button>
-            ))}
-          </div>
-          <span className="mode-description-badge">
-            {mode === 'learn'
-              ? 'โหมดดูสาธิต: ฟังคำอธิบายละเอียดและกดปุ่ม “ทำแล้ว” เพื่อไปขั้นตอนถัดไป'
-              : mode === 'practice'
-              ? 'โหมดฝึกทำ: กดปุ่ม “ทำแล้ว” ได้เอง หรือระบบเลื่อนให้อัตโนมัติหลังฟังจบ 8 วินาที'
-              : 'โหมดลองเอง: แสดงเฉพาะจอสาธิต 3D และฟังคำแนะนำสั้นกระชับจากพยาบาลน้องโฟร์'}
-          </span>
-        </div>
-
         {/* Global Notice Toast */}
         {notice && (
           <div className="portal-notice" role="status">
@@ -918,758 +1153,979 @@ export default function Portal() {
           </div>
         )}
 
-        {/* VIEW: HOME (Welcome Stage & Topic Grid) */}
-        {view === 'home' && (
-          <>
-            <section className="welcome-stage">
-              <div className={`cath-portrait ${narrating ? 'speaking' : ''}`}>
-                <NurseCath speaking={narrating} />
-              </div>
-              <div className="welcome-copy">
-                <span className="gentle-label">พยาบาลน้องโฟร์ · โรงพยาบาลมหาราชนครเชียงใหม่</span>
-                <h1>
-                  ค่อย ๆ ดูแลไปด้วยกัน
-                  <br />
-                  ทีละขั้น อย่างมั่นใจ
-                </h1>
-                <p>
-                  สวัสดีค่ะ ดิฉันพยาบาลน้องโฟร์ ยินดีต้อนรับสู่ CathSim 360 นะคะ ดูภาพสาธิต 3D
-                  ฟังคำแนะนำ แล้วทดลองทำไปพร้อมกันนะคะ
-                </p>
-                {needsStart ? (
-                  <button className="portal-primary welcome-start" onClick={play}>
-                    แตะเพื่อเริ่มฟังเสียงพยาบาลน้องโฟร์
-                  </button>
-                ) : (
-                  <button className="welcome-start portal-primary" onClick={() => openLesson(0)}>
-                    เริ่มดูสาธิตเรื่องที่ 1
-                  </button>
-                )}
-                <span className="welcome-audio-state">
-                  {audioError
-                    ? 'เสียงยังโหลดไม่ได้ แตะปุ่มเริ่มฟังเพื่อลองใหม่ค่ะ'
-                    : narrating
-                    ? 'พยาบาลน้องโฟร์กำลังทักทายคุณ...'
-                    : 'เลือกเรื่องที่ต้องการเรียนรู้ทั้ง 10 เรื่องด้านล่างได้เลยค่ะ'}
-                </span>
-              </div>
-            </section>
-
-            <div className="learning-heading">
-              <h2>วันนี้อยากให้พยาบาลน้องโฟร์ช่วยดูแลเรื่องไหนคะ?</h2>
-              <p>เรียงลำดับการเรียนรู้ครบทั้ง 10 เรื่อง ดูภาพ 3D ทำตามด้วยตนเองให้ครบ ≥ 80% แล้วกด “ทำแล้ว” เพื่อไปต่อค่ะ</p>
-            </div>
-
-            <div className="lesson-grid">
-              {topics.map((t, i) => {
-                const topicStat = currentPatientReport?.topicSummaries[i];
-                return (
-                  <button className="lesson-card" key={t.id} onClick={() => openLesson(i)}>
-                    <div className="lesson-card-top">
-                      <span className="topic-number">{String(i + 1).padStart(2, '0')}</span>
-                      {topicStat && topicStat.viewedSteps > 0 && (
-                        <span className={`topic-score-pill ${topicStat.passed ? 'passed' : 'learning'}`}>
-                          ทำได้เอง {topicStat.scorePercent}% ({topicStat.confirmedSteps}/{topicStat.totalSteps})
-                        </span>
-                      )}
-                    </div>
+        {/* MANDATORY LOGIN GATE: Shown first whenever user is not logged in */}
+        {!isAuthenticated ? (
+          <section className="mandatory-login-gate" aria-label="เข้าสู่ระบบก่อนใช้งาน">
+            <div className="login-shell">
+              {/* Left: brand / welcome panel */}
+              <aside className="login-aside">
+                <div className="login-aside-brand">
+                  <CatheterLogo />
+                  <div>
                     <strong>
-                      {i + 1}. {t.title}
+                      CathSim <em>360</em>
                     </strong>
-                    <p>{t.description}</p>
-                    <span>{t.steps.length} ขั้นตอน · เริ่มดูสาธิต</span>
+                    <span>ดูแลสายสวนปัสสาวะอย่างมั่นใจ</span>
+                  </div>
+                </div>
+                <h1 className="login-aside-title">ยินดีต้อนรับค่ะ</h1>
+                <p className="login-aside-text">
+                  เรียนรู้การดูแลสายสวนปัสสาวะที่บ้าน ทีละขั้นตอน พร้อมพยาบาลน้องโฟร์
+                </p>
+                <ul className="login-aside-points">
+                  <li>
+                    <AuthIcon name="check" />
+                    ดูสาธิต 3 มิติ และทำไปพร้อมกัน
+                  </li>
+                  <li>
+                    <AuthIcon name="check" />
+                    ติดตามความก้าวหน้า เป้าหมายทำได้เอง ≥ 80%
+                  </li>
+                  <li>
+                    <AuthIcon name="shield" />
+                    ใช้รหัส CS แทนชื่อจริง ข้อมูลเป็นความลับ
+                  </li>
+                </ul>
+              </aside>
+
+              {/* Right: form card */}
+              <div className="login-card-panel">
+                <div className="login-role-switcher" role="tablist" aria-label="เลือกประเภทการเข้าสู่ระบบ">
+                  <button
+                    role="tab"
+                    aria-selected={loginRoleTab === 'patient'}
+                    className={loginRoleTab === 'patient' ? 'active-role-tab' : ''}
+                    onClick={() => setLoginRoleTab('patient')}
+                  >
+                    ผู้ป่วย
                   </button>
-                );
-              })}
-            </div>
-          </>
-        )}
-
-        {/* VIEW: LESSON (Guided 3D Scene & Mode-Specific Layout) */}
-        {view === 'lesson' && topic && (
-          <section className="guided-lesson">
-            <div className="lesson-top">
-              <button className="back-topic-btn" onClick={() => navigate('home')}>
-                กลับหน้าเลือกบทเรียน
-              </button>
-              <div className="lesson-top-title">
-                <strong>
-                  {index + 1}. {topic.title}
-                </strong>
-                <span className="lesson-step-badge">
-                  {finished ? 'สาธิตครบแล้ว' : `ขั้นที่ ${step + 1} / ${topic.steps.length}`}
-                </span>
-              </div>
-            </div>
-
-            <div className={`demo-layout ${mode === 'challenge' ? 'challenge-mode' : ''}`}>
-              {/* 3D Interactive Demonstration Stage */}
-              <div className="demonstration">
-                <GuidedScene
-                  topic={topic.id}
-                  visual={current.visual}
-                  paused={paused}
-                  speaking={narrating}
-                  mode={mode}
-                  onAction={(a) => {
-                    actions.current = [...actions.current, a].slice(-80);
-                  }}
-                />
-                <div className="demo-nurse">
-                  <NurseCath speaking={narrating} compact />
-                  <span>{narrating ? 'พยาบาลน้องโฟร์กำลังพูด...' : 'พยาบาลน้องโฟร์'}</span>
+                  <button
+                    role="tab"
+                    aria-selected={loginRoleTab === 'admin'}
+                    className={loginRoleTab === 'admin' ? 'active-role-tab' : ''}
+                    onClick={() => setLoginRoleTab('admin')}
+                  >
+                    admin
+                  </button>
                 </div>
 
-                {/* In CathChallenge mode: show ONLY the demonstration stage + compact action bar */}
-                {mode === 'challenge' && (
-                  <div className="challenge-action-bar">
-                    <div className="challenge-status-text">
-                      <strong>
-                        {finished
-                          ? 'ผ่านการลองทำครบทุกขั้นตอนในหัวข้อนี้แล้วค่ะ'
-                          : `โหมดลองเอง (ขั้นที่ ${step + 1}/${topic.steps.length}): ฟังพยาบาลน้องโฟร์แล้วกดทำในจอสาธิต`}
-                      </strong>
-                      {needsStart && (
-                        <button className="portal-primary" onClick={play}>
-                          แตะเพื่อฟังเสียงคำแนะนำสั้น ๆ
-                        </button>
-                      )}
+                {loginRoleTab === 'patient' ? (
+                  <div className="patient-auth-panel">
+                    <div className="auth-heading">
+                      <h2>{patientAuthMode === 'login' ? 'เข้าสู่ระบบสำหรับผู้ป่วย' : 'สมัครบัญชีผู้ป่วย'}</h2>
+                      <p className="patient-auth-subtitle">
+                        {patientAuthMode === 'login'
+                          ? 'เข้าสู่ระบบด้วยบัญชีและ PIN'
+                          : 'ตั้งบัญชีผู้ใช้และ PIN ของคุณเอง'}
+                      </p>
                     </div>
-                    {!finished ? (
-                      <div className="challenge-buttons">
-                        <button className="portal-primary done-button" onClick={() => advance('confirmed')}>
-                          ทำแล้ว · ไปขั้นต่อไป
-                        </button>
+
+                    {patientAuthMode === 'login' ? (
+                      <div className="auth-fields-stack">
+                        <label className="auth-field">
+                          <span className="auth-label">บัญชีผู้ใช้ (Username)</span>
+                          <span className="auth-input-wrap">
+                            <AuthIcon name="user" />
+                            <input
+                              type="text"
+                              value={patientUsernameInput}
+                              placeholder="Username หรือรหัส CS"
+                              autoComplete="username"
+                              autoCapitalize="none"
+                              onChange={(e) => setPatientUsernameInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') void loginPatient();
+                              }}
+                            />
+                          </span>
+                        </label>
+                        <label className="auth-field">
+                          <span className="auth-label">PIN</span>
+                          <span className="auth-input-wrap">
+                            <AuthIcon name="lock" />
+                            <input
+                              type="password"
+                              inputMode="numeric"
+                              value={patientPinInput}
+                              placeholder="กรอกรหัส PIN"
+                              autoComplete="current-password"
+                              onChange={(e) => setPatientPinInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') void loginPatient();
+                              }}
+                            />
+                          </span>
+                        </label>
                         <button
+                          className="portal-primary auth-submit-btn"
+                          disabled={patientBusy || !patientUsernameInput.trim() || !patientPinInput.trim()}
+                          onClick={loginPatient}
+                        >
+                          {patientBusy ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}
+                        </button>
+                        <div className="auth-divider">
+                          <span>ยังไม่มีบัญชี</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="register-switch-btn"
                           onClick={() => {
-                            if (audio.current) {
-                              audio.current.currentTime = 0;
-                              setReady(false);
-                              setLeft(8);
-                              play();
-                            }
+                            setPatientAuthMode('register');
+                            setNotice('');
                           }}
                         >
-                          ฟังคำแนะนำสั้น ๆ ซ้ำ
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (paused) {
-                              play();
-                            } else {
-                              audio.current?.pause();
-                              setPaused(true);
-                            }
-                          }}
-                        >
-                          {paused ? 'ทำต่อ' : 'พักก่อน'}
+                          กดเพื่อสมัครบัญชี
                         </button>
                       </div>
                     ) : (
-                      <div className="challenge-buttons">
-                        <button className="portal-primary" onClick={() => openLesson((index + 1) % topics.length)}>
-                          ไปหัวข้อถัดไป
+                      <div className="auth-fields-stack">
+                        <div className="auto-cs-preview-badge">
+                          <span>รหัสผู้ป่วยที่คุณจะได้รับ</span>
+                          <strong>{nextAutoCsId}</strong>
+                        </div>
+                        <label className="auth-field">
+                          <span className="auth-label">ตั้งบัญชีผู้ใช้ (Username)</span>
+                          <span className="auth-input-wrap">
+                            <AuthIcon name="user" />
+                            <input
+                              type="text"
+                              value={patientUsernameInput}
+                              placeholder="เช่น somchai01"
+                              autoComplete="off"
+                              autoCapitalize="none"
+                              onChange={(e) => setPatientUsernameInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') void registerPatientAccount();
+                              }}
+                            />
+                          </span>
+                        </label>
+                        <label className="auth-field">
+                          <span className="auth-label">ตั้งรหัส PIN (3–4 หลัก)</span>
+                          <span className="auth-input-wrap">
+                            <AuthIcon name="lock" />
+                            <input
+                              type="password"
+                              inputMode="numeric"
+                              value={patientPinInput}
+                              placeholder="ตั้งรหัส PIN"
+                              autoComplete="new-password"
+                              onChange={(e) => setPatientPinInput(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') void registerPatientAccount();
+                              }}
+                            />
+                          </span>
+                        </label>
+                        <button
+                          className="portal-primary auth-submit-btn"
+                          disabled={patientBusy || !patientUsernameInput.trim() || !patientPinInput.trim()}
+                          onClick={registerPatientAccount}
+                        >
+                          {patientBusy ? 'กำลังสร้างบัญชี…' : 'ยืนยันสมัครบัญชี'}
                         </button>
-                        <button onClick={() => openLesson(index)}>ลองทำหัวข้อนี้อีกครั้ง</button>
+                        <button
+                          type="button"
+                          className="register-switch-btn"
+                          onClick={() => {
+                            setPatientAuthMode('login');
+                            setNotice('');
+                          }}
+                        >
+                          มีบัญชีแล้ว กลับไปเข้าสู่ระบบ
+                        </button>
                       </div>
                     )}
+                    <p className="auth-footnote">
+                      <AuthIcon name="shield" />
+                      ระบบแสดงเฉพาะรหัส CS ไม่แสดง HN หรือชื่อ-นามสกุล
+                    </p>
                   </div>
+                ) : (
+                  renderAdminLoginForm()
                 )}
               </div>
-
-              {/* Spoken Step Text Panel (Shown in CathLearn and CathPractice modes) */}
-              {mode !== 'challenge' && (
-                <div className="spoken-step">
-                  <span className="gentle-label">
-                    {finished
-                      ? 'ขอบคุณที่ดูแลไปด้วยกันค่ะ'
-                      : mode === 'learn'
-                      ? `โหมดดูสาธิต · ขั้นที่ ${step + 1} (กดปุ่มทำแล้วเมื่อดูและทำตามเสร็จ)`
-                      : `โหมดฝึกทำ · ขั้นที่ ${step + 1} (กดปุ่มทำแล้ว หรือรอเลื่อนอัตโนมัติใน 8 วินาที)`}
-                  </span>
-                  <h1>{finished ? 'จบการสาธิตเรื่องนี้แล้วค่ะ' : current.cue}</h1>
-                  <p className="nurse-script" aria-live="polite">
-                    {finished
-                      ? 'เก่งมากค่ะ จบการสาธิตเรื่องนี้แล้วนะคะ สามารถกลับมาดูซ้ำหรือกดไปดูเรื่องถัดไปเพื่อให้ทำได้เองครบตามเกณฑ์ 80% ได้เลยค่ะ พยาบาลน้องโฟร์เป็นกำลังใจให้นะคะ'
-                      : current.text}
-                  </p>
-
-                  {needsStart && (
-                    <button className="portal-primary" onClick={play}>
-                      แตะเพื่อฟังเสียงขั้นตอนนี้
-                    </button>
-                  )}
-
-                  {audioError && (
-                    <div role="alert" className="audio-error">
-                      เสียงยังโหลดไม่ได้ แตะปุ่มเพื่อลองใหม่ หรืออ่านข้อความแล้วทำตามได้ค่ะ ระบบจะไม่เลื่อนเอง
-                      <button onClick={play}>ลองเล่นเสียงใหม่</button>
-                    </div>
-                  )}
-
-                  {/* Step Action Buttons */}
-                  {!finished ? (
-                    <>
-                      <div className="step-actions">
-                        <button className="portal-primary done-button" onClick={() => advance('confirmed')}>
-                          ทำแล้ว · ไปขั้นต่อไป
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (audio.current) {
-                              audio.current.currentTime = 0;
-                              setReady(false);
-                              setLeft(8);
-                              play();
-                            }
-                          }}
-                        >
-                          ฟังและดูซ้ำ
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (paused) {
-                              play();
-                            } else {
-                              audio.current?.pause();
-                              setPaused(true);
-                            }
-                          }}
-                        >
-                          {paused ? 'ทำต่อ' : 'พักก่อน'}
-                        </button>
-                      </div>
-
-                      {mode === 'learn' && (
-                        <div className="mode-hint-box">
-                          โหมดดูสาธิต: เมื่อฟังพยาบาลน้องโฟร์และดูภาพสาธิตเสร็จแล้ว กรุณากดปุ่ม{' '}
-                          <strong>“ทำแล้ว · ไปขั้นต่อไป”</strong> ด้วยตนเองเพื่อบันทึกคะแนนทำได้เองค่ะ
-                        </div>
-                      )}
-
-                      {mode === 'practice' && (
-                        <div className="countdown" aria-live="polite">
-                          {paused
-                            ? 'หยุดพักอยู่ (กด “ทำต่อ” หรือกด “ทำแล้ว” เพื่อไปต่อได้ค่ะ)'
-                            : needsStart
-                            ? 'แตะเริ่มเสียงก่อนค่ะ'
-                            : audioError
-                            ? 'รอโหลดเสียงใหม่'
-                            : !ready
-                            ? 'กำลังฟังคำแนะนำ... เมื่อพูดจบจะนับถอยหลัง 8 วินาที (แนะนำให้กด “ทำแล้ว” ด้วยตนเองเพื่อผ่านเกณฑ์ ≥ 80%)'
-                            : `เลื่อนไปขั้นถัดไปอัตโนมัติใน ${left} วินาที (กดปุ่ม “ทำแล้ว” ด้วยตนเองเพื่อนับคะแนนทำได้เองค่ะ)`}
-                          <small>
-                            เกณฑ์การผ่าน: ผู้ป่วยต้องกดทำตามด้วยตนเอง (“ทำแล้ว”) มากกว่าหรือเท่ากับ 80% ของขั้นตอนทั้งหมดค่ะ
-                          </small>
-                        </div>
-                      )}
-                    </>
-                  ) : (
-                    <div className="step-actions">
-                      <button className="portal-primary done-button" onClick={() => openLesson((index + 1) % topics.length)}>
-                        ไปเรื่องถัดไป ({((index + 1) % topics.length) + 1}. {topics[(index + 1) % topics.length].title})
-                      </button>
-                      <button onClick={() => openLesson(index)}>ฝึกเรื่องนี้อีกครั้ง</button>
-                      <button onClick={() => navigate('home')}>กลับหน้าเลือกบทเรียน</button>
-                    </div>
-                  )}
-
-                  <details>
-                    <summary>แหล่งอ้างอิงของคำแนะนำในขั้นตอนนี้</summary>
-                    {topic.sources.map((srcIdx) => (
-                      <p key={srcIdx}>
-                        <a href={sources[srcIdx]?.url} target="_blank" rel="noreferrer">
-                          {sources[srcIdx]?.name}
-                        </a>
-                      </p>
-                    ))}
-                  </details>
-                </div>
-              )}
-            </div>
-
-            {/* Step Navigation Dots */}
-            <div className="step-dots">
-              {topic.steps.map((s, i) => (
-                <button
-                  className={i === step ? 'active' : ''}
-                  key={i}
-                  aria-label={`ดูขั้นที่ ${i + 1}`}
-                  onClick={() => {
-                    setReady(false);
-                    setLeft(8);
-                    setStep(i);
-                    setFinished(false);
-                    setPaused(false);
-                  }}
-                >
-                  {i + 1}
-                  {mode !== 'challenge' && <span>{s.cue}</span>}
-                </button>
-              ))}
             </div>
           </section>
-        )}
-
-        {/* VIEW: CATHREPORT (Requires Admin Password "dmknj" + Patient CS ID) */}
-        {view === 'report' && (
+        ) : (
           <>
-            {adminSession?.role !== 'admin' ? (
-              <section className="login-card">
-                <h1>CathReport · สำหรับผู้ดูแลระบบ (Admin)</h1>
-                <p>
-                  กรุณากรอก <strong>รหัสผู้ดูแลระบบ (Admin Password)</strong> และ <strong>รหัสผู้ป่วย (CS ID)</strong>{' '}
-                  เพื่อเปิดดูสถิติการใช้งาน เนื้อหาที่เรียน วันที่เรียน และผลการประเมินเกณฑ์ทำได้เอง ≥ 80% ค่ะ
-                </p>
-                <label>
-                  รหัสผู้ดูแลระบบ (Admin Password)
-                  <input
-                    type="password"
-                    value={access}
-                    autoComplete="off"
-                    placeholder="กรอกรหัส Admin"
-                    onChange={(e) => setAccess(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && access.trim()) {
-                        void loginAdmin();
-                      }
-                    }}
-                  />
-                </label>
-                <label>
-                  รหัสผู้ป่วย (CS ID · เช่น CS-1, CS-2)
-                  <input
-                    type="text"
-                    value={reportCsInput}
-                    autoComplete="off"
-                    placeholder="เช่น CS-1, CS-2"
-                    onChange={(e) => setReportCsInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && access.trim()) {
-                        void loginAdmin();
-                      }
-                    }}
-                  />
-                </label>
-                <div className="login-buttons">
-                  <button
-                    className="portal-primary"
-                    disabled={busy || !access.trim() || !reportCsInput.trim()}
-                    onClick={loginAdmin}
-                  >
-                    {busy ? 'กำลังตรวจสอบและดึงข้อมูล Google Sheet…' : 'เปิดดูรายงาน CathReport'}
+            {/* Active User / Patient Code Banner (Clearly shows CS-... code number to the patient) */}
+            {(view === 'home' || view === 'lesson') && (
+              <section className="patient-auth-bar" aria-label="รหัสประจำตัวผู้ป่วย">
+                <div className="patient-active-strip">
+                  <div className="patient-active-info">
+                    <span className="cs-id-pill">
+                      รหัสผู้ป่วยของคุณ: {patientSession?.code || selectedCsId}
+                    </span>
+                    {patientSession?.username && (
+                      <span className="patient-stat-pill">บัญชี: {patientSession.username}</span>
+                    )}
+                    {currentPatientReport && (
+                      <>
+                        <span className="patient-stat-pill">
+                          เรียนแล้ว {currentPatientReport.topicsLearned}/{currentPatientReport.totalTopics} เรื่อง
+                        </span>
+                        <span className="patient-stat-pill">
+                          ทำได้เอง {currentPatientReport.confirmedSteps}/{currentPatientReport.totalSteps} ขั้น ({currentPatientReport.overallScorePercent}%)
+                        </span>
+                        <span className={`pass-criteria-pill ${currentPatientReport.passed80 ? 'pass' : 'pending'}`}>
+                          {currentPatientReport.passed80 ? 'ผ่านเกณฑ์ (≥ 80%)' : 'เป้าหมาย: ทำได้เอง ≥ 80%'}
+                        </span>
+                      </>
+                    )}
+                    <span className="sync-badge">
+                      {syncStatus === 'syncing'
+                        ? 'กำลังสำรองข้อมูลขึ้น Google Sheet…'
+                        : 'ลิงก์ข้อมูล Google Sheet อัตโนมัติ'}
+                    </span>
+                  </div>
+                  <button className="patient-logout-btn" onClick={logoutAll}>
+                    ออกจากระบบ
                   </button>
-                  <button onClick={() => navigate('home')}>กลับหน้าหลัก</button>
                 </div>
               </section>
-            ) : (
-              <section className="portal-report">
-                <div className="report-top-row">
-                  <div>
-                    <h1>CathReport · ระบบติดตามสถิติผู้ป่วยรายบุคคลสำหรับ Admin</h1>
-                    <p>
-                      แสดงข้อมูลด้วยรหัส <strong>CS-...</strong> โดยไม่ระบุ HN หรือชื่อผู้ป่วยในระบบสาธารณะ ·{' '}
-                      <strong>เกณฑ์การผ่าน: ผู้ป่วยต้องทำทุกอย่างได้เอง ≥ 80%</strong>
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => {
-                      setAdminSession(null);
-                      setNotice('ออกจากระบบผู้ดูแลเรียบร้อยแล้วค่ะ');
-                    }}
-                  >
-                    ล็อกหน้าจอ Admin
-                  </button>
-                </div>
+            )}
 
-                {/* CS ID Search & Quick Selector Bar */}
-                <div className="cs-lookup-panel">
-                  <div className="cs-lookup-input-row">
-                    <label>
-                      ค้นหา / เปิดดูรหัสผู้ป่วย (CS ID):
-                      <input
-                        type="text"
-                        value={reportCsInput}
-                        placeholder="เช่น CS-1, CS-2"
-                        onChange={(e) => setReportCsInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && reportCsInput.trim()) {
-                            const norm = normalizeCsId(reportCsInput);
-                            setSelectedCsId(norm);
-                            setReportCsInput(norm);
-                          }
-                        }}
-                      />
-                    </label>
+            {/* Learning Mode Bar (Shown on Home & Lesson views) */}
+            {(view === 'home' || view === 'lesson') && (
+              <div className="experience-bar">
+                <div className="mode-switch" aria-label="โหมดการเรียนรู้">
+                  {(['learn', 'practice', 'challenge'] as LearningMode[]).map((m) => (
                     <button
-                      className="portal-primary"
+                      key={m}
+                      className={mode === m ? 'selected' : ''}
                       onClick={() => {
-                        const norm = normalizeCsId(reportCsInput || 'CS-1');
-                        setSelectedCsId(norm);
-                        setReportCsInput(norm);
+                        setMode(m);
+                        setPaused(false);
+                        setLeft(8);
                       }}
                     >
-                      ดูรายงาน {normalizeCsId(reportCsInput || 'CS-1')}
+                      {m === 'learn'
+                        ? 'CathLearn · ดูสาธิต'
+                        : m === 'practice'
+                        ? 'CathPractice · ฝึกทำ'
+                        : 'CathChallenge · ลองเอง'}
                     </button>
-                  </div>
+                  ))}
+                </div>
+                <span className="mode-description-badge">
+                  {mode === 'learn'
+                    ? 'โหมดดูสาธิต: ฟังคำอธิบายละเอียดและกดปุ่ม “ทำแล้ว” เพื่อไปขั้นตอนถัดไป'
+                    : mode === 'practice'
+                    ? 'โหมดฝึกทำ: กดปุ่ม “ทำแล้ว” ได้เอง หรือระบบเลื่อนให้อัตโนมัติหลังฟังจบ 8 วินาที'
+                    : 'โหมดลองเอง: แสดงเฉพาะจอสาธิต 3D และฟังคำแนะนำสั้นกระชับจากพยาบาลน้องโฟร์'}
+                </span>
+              </div>
+            )}
 
-                  <div className="cs-quick-chips">
-                    <span>รหัสผู้ป่วยในระบบ ({allKnownCsIds.length} ราย):</span>
-                    {allKnownCsIds.map((id) => (
-                      <button
-                        key={id}
-                        className={selectedCsId === id ? 'selected' : ''}
-                        onClick={() => {
-                          setSelectedCsId(id);
-                          setReportCsInput(id);
-                        }}
-                      >
-                        {id}
+            {/* VIEW: HOME (Welcome Stage & Topic Grid) */}
+            {view === 'home' && (
+              <>
+                <section className="welcome-stage">
+                  <div className={`cath-portrait ${narrating ? 'speaking' : ''}`}>
+                    <NurseCath speaking={narrating} />
+                  </div>
+                  <div className="welcome-copy">
+                    <span className="gentle-label">
+                      พยาบาลน้องโฟร์ · รหัสประจำตัวของคุณคือ {patientSession?.code || selectedCsId}
+                    </span>
+                    <h1>
+                      ค่อย ๆ ดูแลไปด้วยกัน
+                      <br />
+                      ทีละขั้น อย่างมั่นใจ
+                    </h1>
+                    <p>
+                      สวัสดีค่ะ ดิฉันพยาบาลน้องโฟร์ ยินดีต้อนรับสู่ CathSim 360 นะคะ ดูภาพสาธิต 3D
+                      ฟังคำแนะนำ แล้วทดลองทำไปพร้อมกันนะคะ
+                    </p>
+                    {needsStart ? (
+                      <button className="portal-primary welcome-start" onClick={play}>
+                        แตะเพื่อเริ่มฟังเสียงพยาบาลน้องโฟร์
                       </button>
-                    ))}
+                    ) : (
+                      <button className="welcome-start portal-primary" onClick={() => openLesson(0)}>
+                        เริ่มดูสาธิตเรื่องที่ 1
+                      </button>
+                    )}
+                    <span className="welcome-audio-state">
+                      {audioError
+                        ? 'เสียงยังโหลดไม่ได้ แตะปุ่มเริ่มฟังเพื่อลองใหม่ค่ะ'
+                        : narrating
+                        ? 'พยาบาลน้องโฟร์กำลังทักทายคุณ...'
+                        : 'เลือกเรื่องที่ต้องการเรียนรู้ทั้ง 10 เรื่องด้านล่างได้เลยค่ะ'}
+                    </span>
+                  </div>
+                </section>
+
+                <div className="learning-heading">
+                  <h2>วันนี้อยากให้พยาบาลน้องโฟร์ช่วยดูแลเรื่องไหนคะ?</h2>
+                  <p>เรียงลำดับการเรียนรู้ครบทั้ง 10 เรื่อง ดูภาพ 3D ทำตามด้วยตนเองให้ครบ ≥ 80% แล้วกด “ทำแล้ว” เพื่อไปต่อค่ะ</p>
+                </div>
+
+                <div className="lesson-grid">
+                  {topics.map((t, i) => {
+                    const topicStat = currentPatientReport?.topicSummaries[i];
+                    return (
+                      <button className="lesson-card" key={t.id} onClick={() => openLesson(i)}>
+                        <div className="lesson-card-top">
+                          <span className="topic-number">{String(i + 1).padStart(2, '0')}</span>
+                          {topicStat && topicStat.viewedSteps > 0 && (
+                            <span className={`topic-score-pill ${topicStat.passed ? 'passed' : 'learning'}`}>
+                              ทำได้เอง {topicStat.scorePercent}% ({topicStat.confirmedSteps}/{topicStat.totalSteps})
+                            </span>
+                          )}
+                        </div>
+                        <strong>
+                          {i + 1}. {t.title}
+                        </strong>
+                        <p>{t.description}</p>
+                        <span>{t.steps.length} ขั้นตอน · เริ่มดูสาธิต</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+
+            {/* VIEW: LESSON (Guided 3D Scene & Mode-Specific Layout) */}
+            {view === 'lesson' && topic && (
+              <section className="guided-lesson">
+                <div className="lesson-top">
+                  <button className="back-topic-btn" onClick={() => navigate('home')}>
+                    กลับหน้าเลือกบทเรียน
+                  </button>
+                  <div className="lesson-top-title">
+                    <strong>
+                      {index + 1}. {topic.title}
+                    </strong>
+                    <span className="lesson-step-badge">
+                      {finished ? 'สาธิตครบแล้ว' : `ขั้นที่ ${step + 1} / ${topic.steps.length}`}
+                    </span>
                   </div>
                 </div>
 
-                {/* Selected Patient Individual Report Card (CS-1, CS-2, ...) */}
-                <div className="patient-report-detail-card">
-                  <div className="patient-detail-header">
-                    <div>
-                      <span className="gentle-label">รายงานผลการเรียนรู้รายบุคคล (เกณฑ์ผ่าน ≥ 80%)</span>
-                      <h2>
-                        รหัสผู้ป่วย: <code>{selectedPatientReport.csId}</code>
-                      </h2>
-                      <p className="patient-dates-meta">
-                        วันที่เริ่มใช้งาน: <strong>{formatThaiDateTime(selectedPatientReport.firstDate)}</strong> · วันที่เรียนรู้ล่าสุด:{' '}
-                        <strong>{formatThaiDateTime(selectedPatientReport.lastDate)}</strong>
-                      </p>
+                <div className={`demo-layout ${mode === 'challenge' ? 'challenge-mode' : ''}`}>
+                  {/* 3D Interactive Demonstration Stage */}
+                  <div className="demonstration">
+                    <GuidedScene
+                      topic={topic.id}
+                      visual={current.visual}
+                      paused={paused}
+                      speaking={narrating}
+                      mode={mode}
+                      onAction={(a) => {
+                        actions.current = [...actions.current, a].slice(-80);
+                      }}
+                    />
+                    <div className="demo-nurse">
+                      <NurseCath speaking={narrating} compact />
+                      <span>{narrating ? 'พยาบาลน้องโฟร์กำลังพูด...' : 'พยาบาลน้องโฟร์'}</span>
                     </div>
-                    <div className={`overall-pass-badge ${selectedPatientReport.passed80 ? 'is-pass' : 'is-fail'}`}>
-                      <strong>{selectedPatientReport.overallScorePercent}%</strong>
-                      <span>
-                        {selectedPatientReport.passed80
-                          ? 'ผ่านเกณฑ์ (ทำได้เอง ≥ 80%)'
-                          : 'ยังไม่ผ่านเกณฑ์ (< 80%)'}
-                      </span>
-                    </div>
-                  </div>
 
-                  {/* Admin-Only Private Reference Note for this CS ID */}
-                  <div className="admin-mapping-row">
-                    <label>
-                      บันทึกช่วยจำสำหรับ Admin เท่านั้น (เชื่อมรหัส {selectedPatientReport.csId} โดยไม่แสดงในหน้าผู้ป่วย):
-                      <input
-                        type="text"
-                        value={patientAccounts[selectedPatientReport.csId]?.adminNote || ''}
-                        placeholder={`บันทึกอ้างอิงส่วนตัวของ Admin สำหรับ ${selectedPatientReport.csId} (เช่น หอผู้ป่วย / เตียง / หมายเหตุติดตาม)`}
-                        onChange={(e) => updateAdminNoteForSelected(selectedPatientReport.csId, e.target.value)}
-                      />
-                    </label>
-                    {patientAccounts[selectedPatientReport.csId]?.pin && (
-                      <span className="admin-pin-tag">
-                        PIN ที่กำหนดไว้: <code>{patientAccounts[selectedPatientReport.csId].pin}</code>
-                      </span>
+                    {/* In CathChallenge mode: show ONLY the demonstration stage + compact action bar */}
+                    {mode === 'challenge' && (
+                      <div className="challenge-action-bar">
+                        <div className="challenge-status-text">
+                          <strong>
+                            {finished
+                              ? 'ผ่านการลองทำครบทุกขั้นตอนในหัวข้อนี้แล้วค่ะ'
+                              : `โหมดลองเอง (ขั้นที่ ${step + 1}/${topic.steps.length}): ฟังพยาบาลน้องโฟร์แล้วกดทำในจอสาธิต`}
+                          </strong>
+                          {needsStart && (
+                            <button className="portal-primary" onClick={play}>
+                              แตะเพื่อฟังเสียงคำแนะนำสั้น ๆ
+                            </button>
+                          )}
+                        </div>
+                        {!finished ? (
+                          <div className="challenge-buttons">
+                            <button className="portal-primary done-button" onClick={() => advance('confirmed')}>
+                              ทำแล้ว · ไปขั้นต่อไป
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (audio.current) {
+                                  audio.current.currentTime = 0;
+                                  setReady(false);
+                                  setLeft(8);
+                                  play();
+                                }
+                              }}
+                            >
+                              ฟังคำแนะนำสั้น ๆ ซ้ำ
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (paused) {
+                                  play();
+                                } else {
+                                  audio.current?.pause();
+                                  setPaused(true);
+                                }
+                              }}
+                            >
+                              {paused ? 'ทำต่อ' : 'พักก่อน'}
+                            </button>
+                          </div>
+                        ) : (
+                          <div className="challenge-buttons">
+                            <button className="portal-primary" onClick={() => openLesson((index + 1) % topics.length)}>
+                              ไปหัวข้อถัดไป
+                            </button>
+                            <button onClick={() => openLesson(index)}>ลองทำหัวข้อนี้อีกครั้ง</button>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
 
-                  <div className="stat-row">
-                    <div>
-                      <b>{selectedPatientReport.overallScorePercent}%</b>
-                      คะแนนทำได้เองรวมทั้งหลักสูตร (เกณฑ์ ≥ 80%)
-                    </div>
-                    <div>
-                      <b>
-                        {selectedPatientReport.confirmedSteps}/{selectedPatientReport.totalSteps}
-                      </b>
-                      ขั้นตอนที่กด “ทำแล้ว” ด้วยตนเอง
-                    </div>
-                    <div>
-                      <b>
-                        {selectedPatientReport.topicsLearned}/{selectedPatientReport.totalTopics}
-                      </b>
-                      เรื่องที่เข้าเรียนแล้ว
-                    </div>
-                    <div>
-                      <b>{selectedPatientReport.passed80 ? 'ผ่านเกณฑ์' : 'ต้องฝึกเพิ่ม'}</b>
-                      สรุปผลการประเมิน (≥ 80%)
-                    </div>
-                  </div>
+                  {/* Spoken Step Text Panel (Shown in CathLearn and CathPractice modes) */}
+                  {mode !== 'challenge' && (
+                    <div className="spoken-step">
+                      <span className="gentle-label">
+                        {finished
+                          ? 'ขอบคุณที่ดูแลไปด้วยกันค่ะ'
+                          : mode === 'learn'
+                          ? `โหมดดูสาธิต · ขั้นที่ ${step + 1} (กดปุ่มทำแล้วเมื่อดูและทำตามเสร็จ)`
+                          : `โหมดฝึกทำ · ขั้นที่ ${step + 1} (กดปุ่มทำแล้ว หรือรอเลื่อนอัตโนมัติใน 8 วินาที)`}
+                      </span>
+                      <h1>{finished ? 'จบการสาธิตเรื่องนี้แล้วค่ะ' : current.cue}</h1>
+                      <p className="nurse-script" aria-live="polite">
+                        {finished
+                          ? 'เก่งมากค่ะ จบการสาธิตเรื่องนี้แล้วนะคะ สามารถกลับมาดูซ้ำหรือกดไปดูเรื่องถัดไปเพื่อให้ทำได้เองครบตามเกณฑ์ 80% ได้เลยค่ะ พยาบาลน้องโฟร์เป็นกำลังใจให้นะคะ'
+                          : current.text}
+                      </p>
 
-                  <h3>
-                    ตารางผลลัพธ์การเรียนรู้รายเรื่องของ {selectedPatientReport.csId} (ครบทั้ง 10 เรื่อง)
-                  </h3>
-                  <div className="table-scroll">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>ลำดับเรื่องที่เรียนรู้</th>
-                          <th>สถานะการเรียน</th>
-                          <th>วันที่เรียนรู้ล่าสุด</th>
-                          <th>ขั้นตอนที่ทำได้เอง</th>
-                          <th>คะแนน (%)</th>
-                          <th>เกณฑ์ ≥ 80%</th>
-                          <th>โหมดที่ใช้ / การโต้ตอบ</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {selectedPatientReport.topicSummaries.map((ts) => (
-                          <tr key={ts.topicId}>
-                            <td>
-                              <strong>
-                                {ts.order}. {ts.title}
-                              </strong>
-                            </td>
-                            <td>
-                              {ts.viewedSteps > 0 ? (
-                                <span className="status-confirmed">เรียนแล้ว</span>
-                              ) : (
-                                <span className="status-auto">ยังไม่ได้เรียน</span>
-                              )}
-                            </td>
-                            <td>{formatThaiDateTime(ts.lastDate)}</td>
-                            <td>
-                              {ts.confirmedSteps} / {ts.totalSteps} ขั้นตอน
-                            </td>
-                            <td>
-                              <strong>{ts.scorePercent}%</strong>
-                            </td>
-                            <td>
-                              <span className={ts.passed ? 'status-confirmed' : 'status-auto'}>
-                                {ts.passed ? 'ผ่าน (≥ 80%)' : 'ยังไม่ผ่าน (< 80%)'}
-                              </span>
-                            </td>
-                            <td>
-                              {ts.modes.length > 0 ? ts.modes.join(', ') : '—'}
-                              {ts.actionsCount > 0 ? ` · โต้ตอบ 3D ${ts.actionsCount} ครั้ง` : ''}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                {/* Admin Tool: Create / Provision New CS-1, CS-2 + PIN */}
-                <div className="admin-create-patient-card">
-                  <h3>ออกรหัสผู้ป่วยใหม่ (CS-1, CS-2, ...) และกำหนด PIN เฉพาะรายบุคคล</h3>
-                  <p>
-                    สร้างรหัส <strong>CS-...</strong> คู่กับ <strong>PIN</strong> เพื่อให้ผู้ป่วยใช้ล็อกอินเข้าใช้งานและสำรองข้อมูลขึ้น Google Sheet โดยไม่มีชื่อหรือ HN ในระบบ
-                  </p>
-                  <div className="admin-create-grid">
-                    <label>
-                      รหัสผู้ป่วย (CS ID)
-                      <input
-                        type="text"
-                        value={newCsId}
-                        placeholder={`เช่น CS-${allKnownCsIds.length + 1}`}
-                        onChange={(e) => setNewCsId(e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      กำหนดรหัส PIN
-                      <input
-                        type="text"
-                        value={newPin}
-                        placeholder="เช่น 1234"
-                        onChange={(e) => setNewPin(e.target.value)}
-                      />
-                    </label>
-                    <label>
-                      บันทึกช่วยจำสำหรับ Admin (เชื่อมรหัสส่วนตัว)
-                      <input
-                        type="text"
-                        value={newAdminNote}
-                        placeholder="หมายเหตุสำหรับ Admin เท่านั้น"
-                        onChange={(e) => setNewAdminNote(e.target.value)}
-                      />
-                    </label>
-                    <button className="portal-primary" onClick={savePatientAccountByAdmin}>
-                      บันทึกรหัสผู้ป่วยและ PIN
-                    </button>
-                  </div>
-                </div>
-
-                {/* All Patients Summary Table for Admin */}
-                <div className="all-patients-summary-card">
-                  <h3>
-                    สถิติภาพรวมผู้ป่วยทั้งหมดในระบบ ({allPatientReports.length} ราย · ผ่านเกณฑ์ ≥ 80% จำนวน{' '}
-                    {allPatientReports.filter((r) => r.passed80).length} ราย)
-                  </h3>
-                  <div className="table-scroll">
-                    <table>
-                      <thead>
-                        <tr>
-                          <th>รหัสผู้ป่วย (CS ID)</th>
-                          <th>บันทึกเชื่อมรหัส (Admin)</th>
-                          <th>PIN</th>
-                          <th>วันที่เรียนรู้ล่าสุด</th>
-                          <th>เนื้อหาที่เรียน</th>
-                          <th>ทำได้เอง (ขั้นตอน)</th>
-                          <th>คะแนนรวม (%)</th>
-                          <th>ผลการประเมิน (≥ 80%)</th>
-                          <th>ดูรายละเอียด</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {allPatientReports.map((r) => (
-                          <tr key={r.csId}>
-                            <td>
-                              <code>{r.csId}</code>
-                            </td>
-                            <td>{patientAccounts[r.csId]?.adminNote || '—'}</td>
-                            <td>
-                              <code>{patientAccounts[r.csId]?.pin || '—'}</code>
-                            </td>
-                            <td>{formatThaiDateTime(r.lastDate)}</td>
-                            <td>
-                              {r.topicsLearned} / {r.totalTopics} เรื่อง
-                            </td>
-                            <td>
-                              {r.confirmedSteps} / {r.totalSteps}
-                            </td>
-                            <td>
-                              <strong>{r.overallScorePercent}%</strong>
-                            </td>
-                            <td>
-                              <span className={r.passed80 ? 'status-confirmed' : 'status-auto'}>
-                                {r.passed80 ? 'ผ่านเกณฑ์ (≥ 80%)' : 'ยังไม่ผ่าน (< 80%)'}
-                              </span>
-                            </td>
-                            <td>
-                              <button
-                                onClick={() => {
-                                  setSelectedCsId(r.csId);
-                                  setReportCsInput(r.csId);
-                                }}
-                              >
-                                เปิดดู {r.csId}
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
-
-                <div className="report-actions-bar">
-                  <button className="portal-primary" onClick={exportCSV}>
-                    ดาวน์โหลดรายงานสรุป CSV (Excel)
-                  </button>
-                  <button className="portal-primary" onClick={exportJSON}>
-                    ดาวน์โหลดข้อมูลทั้งหมด JSON
-                  </button>
-                  <button onClick={() => setDeleteConfirm(true)} className="delete-btn">
-                    ลบประวัติการทดลอง
-                  </button>
-                </div>
-
-                {deleteConfirm && (
-                  <div className="delete-confirm" role="alert">
-                    <p>
-                      <strong>ยืนยันการลบประวัติ?</strong> ข้อมูลประวัติการทดลองทั้งหมดจะถูกลบอย่างถาวรและไม่สามารถย้อนกลับได้
-                    </p>
-                    <button disabled={busy} onClick={removeHistory} className="confirm-delete-btn">
-                      ยืนยันลบประวัติทั้งหมด
-                    </button>
-                    <button onClick={() => setDeleteConfirm(false)}>ยกเลิก</button>
-                  </div>
-                )}
-
-                <h3>ประวัติการกดทำรายขั้นตอนของ {selectedPatientReport.csId}</h3>
-                <div className="table-scroll">
-                  <table>
-                    <thead>
-                      <tr>
-                        <th>รหัสผู้ป่วย</th>
-                        <th>วันและเวลา</th>
-                        <th>เรื่องที่เรียนรู้</th>
-                        <th>ขั้น</th>
-                        <th>สถานะการทำ</th>
-                        <th>เวลาที่ใช้</th>
-                        <th>โหมด / การโต้ตอบในฉาก 3D</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedCsEvents.length > 0 ? (
-                        selectedCsEvents
-                          .slice()
-                          .reverse()
-                          .map((e) => (
-                            <tr key={e.id}>
-                              <td>
-                                <code>{normalizeCsId(e.code)}</code>
-                              </td>
-                              <td>{formatThaiDateTime(e.time)}</td>
-                              <td>{topics.find((t) => t.id === e.topic)?.title || e.topic}</td>
-                              <td>{e.step + 1}</td>
-                              <td>
-                                <span className={e.trigger === 'confirmed' ? 'status-confirmed' : 'status-auto'}>
-                                  {e.trigger === 'confirmed' ? 'ทำได้เอง (กดทำแล้ว)' : 'ดูผ่านอัตโนมัติ'}
-                                </span>
-                              </td>
-                              <td>{e.seconds} วินาที</td>
-                              <td>
-                                <span className="mode-tag">{e.mode || 'learn'}</span> ·{' '}
-                                {(e.actions || []).length > 0 ? (e.actions || []).join(' -> ') : '—'}
-                              </td>
-                            </tr>
-                          ))
-                      ) : (
-                        <tr>
-                          <td colSpan={7}>ยังไม่มีประวัติการทำขั้นตอนสำหรับรหัส {selectedPatientReport.csId} ค่ะ</td>
-                        </tr>
+                      {needsStart && (
+                        <button className="portal-primary" onClick={play}>
+                          แตะเพื่อฟังเสียงขั้นตอนนี้
+                        </button>
                       )}
-                    </tbody>
-                  </table>
+
+                      {audioError && (
+                        <div role="alert" className="audio-error">
+                          เสียงยังโหลดไม่ได้ แตะปุ่มเพื่อลองใหม่ หรืออ่านข้อความแล้วทำตามได้ค่ะ ระบบจะไม่เลื่อนเอง
+                          <button onClick={play}>ลองเล่นเสียงใหม่</button>
+                        </div>
+                      )}
+
+                      {/* Step Action Buttons */}
+                      {!finished ? (
+                        <>
+                          <div className="step-actions">
+                            <button className="portal-primary done-button" onClick={() => advance('confirmed')}>
+                              ทำแล้ว · ไปขั้นต่อไป
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (audio.current) {
+                                  audio.current.currentTime = 0;
+                                  setReady(false);
+                                  setLeft(8);
+                                  play();
+                                }
+                              }}
+                            >
+                              ฟังและดูซ้ำ
+                            </button>
+                            <button
+                              onClick={() => {
+                                if (paused) {
+                                  play();
+                                } else {
+                                  audio.current?.pause();
+                                  setPaused(true);
+                                }
+                              }}
+                            >
+                              {paused ? 'ทำต่อ' : 'พักก่อน'}
+                            </button>
+                          </div>
+
+                          {mode === 'learn' && (
+                            <div className="mode-hint-box">
+                              โหมดดูสาธิต: เมื่อฟังพยาบาลน้องโฟร์และดูภาพสาธิตเสร็จแล้ว กรุณากดปุ่ม{' '}
+                              <strong>“ทำแล้ว · ไปขั้นต่อไป”</strong> ด้วยตนเองเพื่อบันทึกคะแนนทำได้เองค่ะ
+                            </div>
+                          )}
+
+                          {mode === 'practice' && (
+                            <div className="countdown" aria-live="polite">
+                              {paused
+                                ? 'หยุดพักอยู่ (กด “ทำต่อ” หรือกด “ทำแล้ว” เพื่อไปต่อได้ค่ะ)'
+                                : needsStart
+                                ? 'แตะเริ่มเสียงก่อนค่ะ'
+                                : audioError
+                                ? 'รอโหลดเสียงใหม่'
+                                : !ready
+                                ? 'กำลังฟังคำแนะนำ... เมื่อพูดจบจะนับถอยหลัง 8 วินาที (แนะนำให้กด “ทำแล้ว” ด้วยตนเองเพื่อผ่านเกณฑ์ ≥ 80%)'
+                                : `เลื่อนไปขั้นถัดไปอัตโนมัติใน ${left} วินาที (กดปุ่ม “ทำแล้ว” ด้วยตนเองเพื่อนับคะแนนทำได้เองค่ะ)`}
+                              <small>
+                                เกณฑ์การผ่าน: ผู้ป่วยต้องกดทำตามด้วยตนเอง (“ทำแล้ว”) มากกว่าหรือเท่ากับ 80% ของขั้นตอนทั้งหมดค่ะ
+                              </small>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="step-actions">
+                          <button className="portal-primary done-button" onClick={() => openLesson((index + 1) % topics.length)}>
+                            ไปเรื่องถัดไป ({((index + 1) % topics.length) + 1}. {topics[(index + 1) % topics.length].title})
+                          </button>
+                          <button onClick={() => openLesson(index)}>ฝึกเรื่องนี้อีกครั้ง</button>
+                          <button onClick={() => navigate('home')}>กลับหน้าเลือกบทเรียน</button>
+                        </div>
+                      )}
+
+                      <details>
+                        <summary>แหล่งอ้างอิงของคำแนะนำในขั้นตอนนี้</summary>
+                        {topic.sources.map((srcIdx) => (
+                          <p key={srcIdx}>
+                            <a href={sources[srcIdx]?.url} target="_blank" rel="noreferrer">
+                              {sources[srcIdx]?.name}
+                            </a>
+                          </p>
+                        ))}
+                      </details>
+                    </div>
+                  )}
                 </div>
 
-                <p className="report-definition">
-                  * ข้อมูลการทำผ่านในระบบเป็นผลการเรียนรู้ในซอฟต์แวร์จำลอง 3D (เกณฑ์ผ่าน: ทำด้วยตนเอง ≥ 80%)
-                  และสำรองข้อมูลผ่าน Google Sheet โดยใช้รหัสสมมติ CS-... เพื่อคุ้มครองข้อมูลส่วนบุคคลของผู้ป่วย
-                </p>
+                {/* Step Navigation Dots */}
+                <div className="step-dots">
+                  {topic.steps.map((s, i) => (
+                    <button
+                      className={i === step ? 'active' : ''}
+                      key={i}
+                      aria-label={`ดูขั้นที่ ${i + 1}`}
+                      onClick={() => {
+                        setReady(false);
+                        setLeft(8);
+                        setStep(i);
+                        setFinished(false);
+                        setPaused(false);
+                      }}
+                    >
+                      {i + 1}
+                      {mode !== 'challenge' && <span>{s.cue}</span>}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
+
+            {/* VIEW: CATHREPORT (Requires Admin Login; Wrong > 2 times locks 15 minutes) */}
+            {view === 'report' && (
+              <>
+                {adminSession?.role !== 'admin' ? (
+                  <section className="mandatory-login-gate">{renderAdminLoginForm()}</section>
+                ) : (
+                  <section className="portal-report">
+                    <div className="report-top-row">
+                      <div>
+                        <h1>CathReport · ระบบจัดการและดูข้อมูลผู้ป่วยรายบุคคลสำหรับ Admin</h1>
+                        <p>
+                          ตรวจสอบผลการเรียนรู้รายบุคคลด้วยรหัส <strong>CS ID</strong> (เกณฑ์ผ่าน ≥ 80%) และเชื่อมโยงข้อมูลความลับ (HN / ชื่อ - นามสกุล) ไว้ที่ Google Sheet
+                        </p>
+                      </div>
+                      <button onClick={logoutAll}>ออกจากระบบ Admin</button>
+                    </div>
+
+                    {/* CS ID Search & Quick Selector Bar */}
+                    <div className="cs-lookup-panel">
+                      <div className="cs-lookup-input-row">
+                        <label>
+                          ใส่ CS ID เพื่อดูข้อมูลผู้ป่วยรายบุคคล:
+                          <input
+                            type="text"
+                            value={reportCsInput}
+                            placeholder="เช่น CS-1, CS-2"
+                            onChange={(e) => setReportCsInput(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' && reportCsInput.trim()) {
+                                const norm = normalizeCsId(reportCsInput);
+                                setSelectedCsId(norm);
+                                setReportCsInput(norm);
+                              }
+                            }}
+                          />
+                        </label>
+                        <button
+                          className="portal-primary"
+                          onClick={() => {
+                            const norm = normalizeCsId(reportCsInput || 'CS-1');
+                            setSelectedCsId(norm);
+                            setReportCsInput(norm);
+                          }}
+                        >
+                          ดูข้อมูล {normalizeCsId(reportCsInput || 'CS-1')}
+                        </button>
+                      </div>
+
+                      {allKnownCsIds.length > 0 && (
+                        <div className="cs-quick-chips">
+                          <span>รหัส CS ID ในระบบ ({allKnownCsIds.length} ราย):</span>
+                          {allKnownCsIds.map((id) => (
+                            <button
+                              key={id}
+                              className={selectedCsId === id ? 'selected' : ''}
+                              onClick={() => {
+                                setSelectedCsId(id);
+                                setReportCsInput(id);
+                              }}
+                            >
+                              {id}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Confidential Identity Linker Box (CS ID -> HN + ชื่อ - นามสกุล in Google Sheet, Do Not Publish) */}
+                    <div className="admin-confidential-link-card">
+                      <div className="confidential-header">
+                        <div>
+                          <span className="confidential-badge">ความลับเฉพาะ Admin · เก็บไว้ที่ Google Sheet · ห้ามเผยแพร่</span>
+                          <h3>ช่องเชื่อมต่อข้อมูลผู้ป่วยรายบุคคล (CS ID ↔ HN และ ชื่อ - นามสกุล)</h3>
+                          <p>
+                            หลังจากผู้ป่วยสมัครบัญชีและได้รับรหัส <strong>CS ID</strong> แล้ว ให้ Admin กรอก <strong>CS ID</strong> คู่กับ{' '}
+                            <strong>HN</strong> และ <strong>ชื่อ - นามสกุล</strong> เพื่อเก็บเป็นความลับไว้ที่ Google Sheet ที่ลิงก์ไว้ (ห้ามเผยแพร่)
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="confidential-form-grid">
+                        <label>
+                          CS ID (รหัสผู้ป่วย)
+                          <input
+                            type="text"
+                            value={linkCsIdInput}
+                            placeholder="เช่น CS-1, CS-2"
+                            onChange={(e) => setLinkCsIdInput(e.target.value)}
+                          />
+                        </label>
+                        <label>
+                          HN (หมายเลขประจำตัวผู้ป่วย)
+                          <input
+                            type="text"
+                            value={linkHnInput}
+                            placeholder="กรอก HN ของผู้ป่วย"
+                            onChange={(e) => setLinkHnInput(e.target.value)}
+                          />
+                        </label>
+                        <label>
+                          ชื่อ - นามสกุล (ผู้ป่วย)
+                          <input
+                            type="text"
+                            value={linkFullNameInput}
+                            placeholder="กรอก ชื่อ - นามสกุล ของผู้ป่วย"
+                            onChange={(e) => setLinkFullNameInput(e.target.value)}
+                          />
+                        </label>
+                        <button
+                          className="portal-primary"
+                          disabled={linkBusy || !linkCsIdInput.trim() || !linkHnInput.trim() || !linkFullNameInput.trim()}
+                          onClick={saveConfidentialLink}
+                        >
+                          {linkBusy ? 'กำลังบันทึกเป็นความลับ…' : 'บันทึกเชื่อมข้อมูลไว้ที่ Google Sheet (ความลับ)'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Selected Patient Individual Report Card (CS-1, CS-2, ...) */}
+                    <div className="patient-report-detail-card">
+                      <div className="patient-detail-header">
+                        <div>
+                          <span className="gentle-label">ข้อมูลผู้ป่วยรายบุคคล (เกณฑ์ผ่าน ≥ 80%)</span>
+                          <h2>
+                            รหัสผู้ป่วย: <code>{selectedPatientReport.csId}</code>
+                            {patientAccounts[selectedPatientReport.csId]?.username && (
+                              <span className="report-username-pill">
+                                บัญชีผู้ใช้: {patientAccounts[selectedPatientReport.csId].username}
+                              </span>
+                            )}
+                          </h2>
+                          {confidentialLinks[selectedPatientReport.csId] ? (
+                            <div className="confidential-linked-summary">
+                              <span>
+                                <strong>HN (ความลับ):</strong> {confidentialLinks[selectedPatientReport.csId].hn}
+                              </span>
+                              <span>
+                                <strong>ชื่อ - นามสกุล (ความลับ):</strong> {confidentialLinks[selectedPatientReport.csId].fullName}
+                              </span>
+                              <span className="confidential-mini-tag">เฉพาะ Admin · ห้ามเผยแพร่</span>
+                            </div>
+                          ) : (
+                            <p className="unlinked-hint">
+                              ยังไม่ได้เชื่อมข้อมูล HN และ ชื่อ - นามสกุล สำหรับรหัส {selectedPatientReport.csId} (กรอกในช่องเชื่อมต่อข้อมูลด้านบนได้ค่ะ)
+                            </p>
+                          )}
+                          <p className="patient-dates-meta">
+                            วันที่เริ่มใช้งาน: <strong>{formatThaiDateTime(selectedPatientReport.firstDate)}</strong> · วันที่เรียนรู้ล่าสุด:{' '}
+                            <strong>{formatThaiDateTime(selectedPatientReport.lastDate)}</strong>
+                          </p>
+                        </div>
+                        <div className={`overall-pass-badge ${selectedPatientReport.passed80 ? 'is-pass' : 'is-fail'}`}>
+                          <strong>{selectedPatientReport.overallScorePercent}%</strong>
+                          <span>
+                            {selectedPatientReport.passed80 ? 'ผ่านเกณฑ์ (ทำได้เอง ≥ 80%)' : 'ยังไม่ผ่านเกณฑ์ (< 80%)'}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="stat-row">
+                        <div>
+                          <b>{selectedPatientReport.overallScorePercent}%</b>
+                          คะแนนทำได้เองรวมทั้งหลักสูตร (เกณฑ์ ≥ 80%)
+                        </div>
+                        <div>
+                          <b>
+                            {selectedPatientReport.confirmedSteps}/{selectedPatientReport.totalSteps}
+                          </b>
+                          ขั้นตอนที่กด “ทำแล้ว” ด้วยตนเอง
+                        </div>
+                        <div>
+                          <b>
+                            {selectedPatientReport.topicsLearned}/{selectedPatientReport.totalTopics}
+                          </b>
+                          เรื่องที่เข้าเรียนแล้ว
+                        </div>
+                        <div>
+                          <b>{selectedPatientReport.passed80 ? 'ผ่านเกณฑ์' : 'ต้องฝึกเพิ่ม'}</b>
+                          สรุปผลการประเมิน (≥ 80%)
+                        </div>
+                      </div>
+
+                      <h3>ตารางผลลัพธ์การเรียนรู้รายเรื่องของ {selectedPatientReport.csId} (ครบทั้ง 10 เรื่อง)</h3>
+                      <div className="table-scroll">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>ลำดับเรื่องที่เรียนรู้</th>
+                              <th>สถานะการเรียน</th>
+                              <th>วันที่เรียนรู้ล่าสุด</th>
+                              <th>ขั้นตอนที่ทำได้เอง</th>
+                              <th>คะแนน (%)</th>
+                              <th>เกณฑ์ ≥ 80%</th>
+                              <th>โหมดที่ใช้ / การโต้ตอบ</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {selectedPatientReport.topicSummaries.map((ts) => (
+                              <tr key={ts.topicId}>
+                                <td>
+                                  <strong>
+                                    {ts.order}. {ts.title}
+                                  </strong>
+                                </td>
+                                <td>
+                                  {ts.viewedSteps > 0 ? (
+                                    <span className="status-confirmed">เรียนแล้ว</span>
+                                  ) : (
+                                    <span className="status-auto">ยังไม่ได้เรียน</span>
+                                  )}
+                                </td>
+                                <td>{formatThaiDateTime(ts.lastDate)}</td>
+                                <td>
+                                  {ts.confirmedSteps} / {ts.totalSteps} ขั้นตอน
+                                </td>
+                                <td>
+                                  <strong>{ts.scorePercent}%</strong>
+                                </td>
+                                <td>
+                                  <span className={ts.passed ? 'status-confirmed' : 'status-auto'}>
+                                    {ts.passed ? 'ผ่าน (≥ 80%)' : 'ยังไม่ผ่าน (< 80%)'}
+                                  </span>
+                                </td>
+                                <td>
+                                  {ts.modes.length > 0 ? ts.modes.join(', ') : '—'}
+                                  {ts.actionsCount > 0 ? ` · โต้ตอบ 3D ${ts.actionsCount} ครั้ง` : ''}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* All Patients Summary Table for Admin */}
+                    <div className="all-patients-summary-card">
+                      <h3>
+                        ตารางสรุปข้อมูลผู้ป่วยทั้งหมดสำหรับ Admin ({allPatientReports.length} ราย · ผ่านเกณฑ์ ≥ 80% จำนวน{' '}
+                        {allPatientReports.filter((r) => r.passed80).length} ราย)
+                      </h3>
+                      <div className="table-scroll">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>CS ID</th>
+                              <th>บัญชีผู้ใช้ (Username)</th>
+                              <th>HN (ความลับ Google Sheet)</th>
+                              <th>ชื่อ - นามสกุล (ความลับ Google Sheet)</th>
+                              <th>วันที่เรียนรู้ล่าสุด</th>
+                              <th>เนื้อหาที่เรียน</th>
+                              <th>ทำได้เอง</th>
+                              <th>คะแนน (%)</th>
+                              <th>ผลการประเมิน (≥ 80%)</th>
+                              <th>จัดการ</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {allPatientReports.map((r) => (
+                              <tr key={r.csId}>
+                                <td>
+                                  <code>{r.csId}</code>
+                                </td>
+                                <td>{patientAccounts[r.csId]?.username || '—'}</td>
+                                <td>{confidentialLinks[r.csId]?.hn || '—'}</td>
+                                <td>{confidentialLinks[r.csId]?.fullName || '—'}</td>
+                                <td>{formatThaiDateTime(r.lastDate)}</td>
+                                <td>
+                                  {r.topicsLearned} / {r.totalTopics} เรื่อง
+                                </td>
+                                <td>
+                                  {r.confirmedSteps} / {r.totalSteps}
+                                </td>
+                                <td>
+                                  <strong>{r.overallScorePercent}%</strong>
+                                </td>
+                                <td>
+                                  <span className={r.passed80 ? 'status-confirmed' : 'status-auto'}>
+                                    {r.passed80 ? 'ผ่านเกณฑ์ (≥ 80%)' : 'ยังไม่ผ่าน (< 80%)'}
+                                  </span>
+                                </td>
+                                <td>
+                                  <button
+                                    onClick={() => {
+                                      setSelectedCsId(r.csId);
+                                      setReportCsInput(r.csId);
+                                    }}
+                                  >
+                                    เปิดดู {r.csId}
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div className="report-actions-bar">
+                      <button className="portal-primary" onClick={exportCSV}>
+                        ดาวน์โหลดรายงาน CSV (สำหรับ Admin)
+                      </button>
+                      <button className="portal-primary" onClick={exportJSON}>
+                        ดาวน์โหลดข้อมูล JSON (สำหรับ Admin)
+                      </button>
+                      <button onClick={() => setDeleteConfirm(true)} className="delete-btn">
+                        ลบประวัติการทดลอง
+                      </button>
+                    </div>
+
+                    {deleteConfirm && (
+                      <div className="delete-confirm" role="alert">
+                        <p>
+                          <strong>ยืนยันการลบประวัติ?</strong> ข้อมูลประวัติการทดลองทั้งหมดจะถูกลบอย่างถาวรและไม่สามารถย้อนกลับได้
+                        </p>
+                        <button disabled={busy} onClick={removeHistory} className="confirm-delete-btn">
+                          ยืนยันลบประวัติทั้งหมด
+                        </button>
+                        <button onClick={() => setDeleteConfirm(false)}>ยกเลิก</button>
+                      </div>
+                    )}
+
+                    <h3>ประวัติการกดทำรายขั้นตอนของ {selectedPatientReport.csId}</h3>
+                    <div className="table-scroll">
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>รหัสผู้ป่วย</th>
+                            <th>วันและเวลา</th>
+                            <th>เรื่องที่เรียนรู้</th>
+                            <th>ขั้น</th>
+                            <th>สถานะการทำ</th>
+                            <th>เวลาที่ใช้</th>
+                            <th>โหมด / การโต้ตอบในฉาก 3D</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {selectedCsEvents.length > 0 ? (
+                            selectedCsEvents
+                              .slice()
+                              .reverse()
+                              .map((e) => (
+                                <tr key={e.id}>
+                                  <td>
+                                    <code>{normalizeCsId(e.code)}</code>
+                                  </td>
+                                  <td>{formatThaiDateTime(e.time)}</td>
+                                  <td>{topics.find((t) => t.id === e.topic)?.title || e.topic}</td>
+                                  <td>{e.step + 1}</td>
+                                  <td>
+                                    <span className={e.trigger === 'confirmed' ? 'status-confirmed' : 'status-auto'}>
+                                      {e.trigger === 'confirmed' ? 'ทำได้เอง (กดทำแล้ว)' : 'ดูผ่านอัตโนมัติ'}
+                                    </span>
+                                  </td>
+                                  <td>{e.seconds} วินาที</td>
+                                  <td>
+                                    <span className="mode-tag">{e.mode || 'learn'}</span> ·{' '}
+                                    {(e.actions || []).length > 0 ? (e.actions || []).join(' -> ') : '—'}
+                                  </td>
+                                </tr>
+                              ))
+                          ) : (
+                            <tr>
+                              <td colSpan={7}>ยังไม่มีประวัติการทำขั้นตอนสำหรับรหัส {selectedPatientReport.csId} ค่ะ</td>
+                            </tr>
+                          )}
+                        </tbody>
+                      </table>
+                    </div>
+                  </section>
+                )}
+              </>
+            )}
+
+            {/* VIEW: SOURCES & CLINICAL GUIDELINES */}
+            {view === 'sources' && (
+              <section className="source-page">
+                <h1>แหล่งอ้างอิงและแนวทางการดูแลสายสวนปัสสาวะ</h1>
+                <div className="hospital-guideline-card">
+                  <h3>แนวทางของโรงพยาบาลมหาราชนครเชียงใหม่</h3>
+                  <ul>
+                    <li>
+                      <strong>การเปลี่ยนสายสวนปัสสาวะ:</strong> นัดเปลี่ยนสายที่สถานพยาบาลใกล้บ้านทุก 2 สัปดาห์ หรือตามใบนัดของแพทย์
+                      (ห้ามผู้ป่วยหรือผู้ดูแลถอดหรือใส่สายเองที่บ้าน)
+                    </li>
+                    <li>
+                      <strong>การเปลี่ยนถุงปัสสาวะ:</strong> โรงพยาบาลมหาราชนครเชียงใหม่แนะนำให้เปลี่ยนถุงทุกสัปดาห์
+                      โดยใช้วิธีปลอดเชื้อ (Non-touch technique)
+                    </li>
+                    <li>
+                      <strong>การทำความสะอาดอวัยวะเพศ:</strong> แนะนำทำความสะอาดวันละ 3 ครั้ง ปรับตามเวลาตื่นนอนและทำเพิ่มเมื่อเปื้อน
+                      โดยใช้สบู่อ่อนกับน้ำสะอาด ล้างและซับให้แห้ง
+                    </li>
+                    <li>
+                      <strong>การดื่มน้ำ:</strong> หากไม่มีข้อจำกัดทางการแพทย์ (เช่น โรคหัวใจหรือโรคไต) แนะนำดื่มน้ำ 2.5–3 ลิตรต่อวัน
+                      เพื่อช่วยระบายทางเดินปัสสาวะ
+                    </li>
+                  </ul>
+                </div>
+
+                <h2>หลักฐานเชิงประจักษ์และแนวทางมาตรฐานสากล</h2>
+                {sources.map((s) => (
+                  <article key={s.url}>
+                    <h3>
+                      <a href={s.url} target="_blank" rel="noreferrer">
+                        {s.name}
+                      </a>
+                    </h3>
+                    <p>{s.note}</p>
+                  </article>
+                ))}
               </section>
             )}
           </>
-        )}
-
-        {/* VIEW: SOURCES & CLINICAL GUIDELINES */}
-        {view === 'sources' && (
-          <section className="source-page">
-            <h1>แหล่งอ้างอิงและแนวทางการดูแลสายสวนปัสสาวะ</h1>
-            <div className="hospital-guideline-card">
-              <h3>แนวทางของโรงพยาบาลมหาราชนครเชียงใหม่</h3>
-              <ul>
-                <li>
-                  <strong>การเปลี่ยนสายสวนปัสสาวะ:</strong> นัดเปลี่ยนสายที่สถานพยาบาลใกล้บ้านทุก 2 สัปดาห์ หรือตามใบนัดของแพทย์
-                  (ห้ามผู้ป่วยหรือผู้ดูแลถอดหรือใส่สายเองที่บ้าน)
-                </li>
-                <li>
-                  <strong>การเปลี่ยนถุงปัสสาวะ:</strong> โรงพยาบาลมหาราชนครเชียงใหม่แนะนำให้เปลี่ยนถุงทุกสัปดาห์
-                  โดยใช้วิธีปลอดเชื้อ (Non-touch technique)
-                </li>
-                <li>
-                  <strong>การทำความสะอาดอวัยวะเพศ:</strong> แนะนำทำความสะอาดวันละ 3 ครั้ง ปรับตามเวลาตื่นนอนและทำเพิ่มเมื่อเปื้อน
-                  โดยใช้สบู่อ่อนกับน้ำสะอาด ล้างและซับให้แห้ง
-                </li>
-                <li>
-                  <strong>การดื่มน้ำ:</strong> หากไม่มีข้อจำกัดทางการแพทย์ (เช่น โรคหัวใจหรือโรคไต) แนะนำดื่มน้ำ 2.5–3 ลิตรต่อวัน
-                  เพื่อช่วยระบายทางเดินปัสสาวะ
-                </li>
-              </ul>
-            </div>
-
-            <h2>หลักฐานเชิงประจักษ์และแนวทางมาตรฐานสากล</h2>
-            {sources.map((s) => (
-              <article key={s.url}>
-                <h3>
-                  <a href={s.url} target="_blank" rel="noreferrer">
-                    {s.name}
-                  </a>
-                </h3>
-                <p>{s.note}</p>
-              </article>
-            ))}
-          </section>
         )}
 
         {/* Modern Footer */}

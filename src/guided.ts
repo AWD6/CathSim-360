@@ -388,6 +388,107 @@ export function isValidCsId(csId: string): boolean {
   return /^CS-[A-Z0-9]{1,28}$/.test(csId);
 }
 
+export function nextAvailableCsId(existingCodes: string[]): string {
+  let maxNum = 0;
+  for (const raw of existingCodes) {
+    const norm = normalizeCsId(raw);
+    const match = /^CS-(\d+)$/.exec(norm);
+    if (match) {
+      const n = Number(match[1]);
+      if (Number.isFinite(n) && n > maxNum) maxNum = n;
+    }
+  }
+  return `CS-${maxNum + 1}`;
+}
+
+export const ADMIN_MAX_WRONG_ATTEMPTS = 2;
+export const ADMIN_LOCKOUT_MS = 15 * 60 * 1000;
+
+export type AdminLockState = {
+  failedAttempts: number;
+  lockUntil: number;
+};
+
+export function checkAdminLockout(
+  state: AdminLockState,
+  nowMs: number = Date.now()
+): { locked: boolean; remainingSeconds: number; activeState: AdminLockState } {
+  if (state.lockUntil > 0 && nowMs >= state.lockUntil) {
+    return {
+      locked: false,
+      remainingSeconds: 0,
+      activeState: { failedAttempts: 0, lockUntil: 0 }
+    };
+  }
+  if (state.lockUntil > nowMs) {
+    return {
+      locked: true,
+      remainingSeconds: Math.max(1, Math.ceil((state.lockUntil - nowMs) / 1000)),
+      activeState: state
+    };
+  }
+  return {
+    locked: false,
+    remainingSeconds: 0,
+    activeState: state
+  };
+}
+
+export function evaluateAdminPasswordAttempt(
+  state: AdminLockState,
+  isCorrect: boolean,
+  nowMs: number = Date.now()
+): {
+  allowed: boolean;
+  locked: boolean;
+  remainingSeconds: number;
+  state: AdminLockState;
+} {
+  const checked = checkAdminLockout(state, nowMs);
+  if (checked.locked) {
+    return {
+      allowed: false,
+      locked: true,
+      remainingSeconds: checked.remainingSeconds,
+      state: checked.activeState
+    };
+  }
+
+  if (isCorrect) {
+    return {
+      allowed: true,
+      locked: false,
+      remainingSeconds: 0,
+      state: { failedAttempts: 0, lockUntil: 0 }
+    };
+  }
+
+  const nextFailed = checked.activeState.failedAttempts + 1;
+  if (nextFailed > ADMIN_MAX_WRONG_ATTEMPTS) {
+    const lockUntil = nowMs + ADMIN_LOCKOUT_MS;
+    return {
+      allowed: false,
+      locked: true,
+      remainingSeconds: Math.ceil(ADMIN_LOCKOUT_MS / 1000),
+      state: { failedAttempts: nextFailed, lockUntil }
+    };
+  }
+
+  return {
+    allowed: false,
+    locked: false,
+    remainingSeconds: 0,
+    state: { failedAttempts: nextFailed, lockUntil: 0 }
+  };
+}
+
+export function formatLockoutRemaining(seconds: number): string {
+  const safe = Math.max(0, Math.ceil(seconds));
+  const mins = Math.floor(safe / 60);
+  const secs = safe % 60;
+  return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+}
+
 export function evaluatePatientProgress(events: StepEvent[], rawCsId: string): PatientEvaluationReport {
   const csId = normalizeCsId(rawCsId);
   const userEvents = events.filter((e) => normalizeCsId(e.code) === csId);
