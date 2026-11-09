@@ -3276,3 +3276,391 @@
   background: #f0fdf9;
   border-radius: 8px;
 }
+
+/* ========================================================
+   Nurse Nong Four Speech Speed Control
+   ======================================================== */
+.nurse-speed-selector {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 14px 0;
+}
+
+.welcome-speed-selector {
+  margin: 18px 0 10px;
+  padding: 12px 18px;
+  background: rgba(255, 255, 255, 0.75);
+  backdrop-filter: blur(8px);
+  border: 1px solid #ccfbf1;
+  border-radius: 16px;
+  width: fit-content;
+}
+
+.lesson-speed-selector {
+  margin: 12px 0 16px;
+  padding: 10px 14px;
+  background: #f0fdf9;
+  border: 1px solid #cce5dc;
+  border-radius: 12px;
+}
+
+.speed-title {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f4039;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.speed-pill-group {
+  display: inline-flex;
+  background: #e6f4f1;
+  border-radius: 999px;
+  padding: 3px;
+  gap: 3px;
+  border: 1px solid #b2e6db;
+}
+
+.speed-pill-group.mini {
+  padding: 2px;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #99f6e4;
+  box-shadow: 0 2px 6px rgba(13, 148, 136, 0.15);
+  margin-top: 4px;
+}
+
+.speed-pill {
+  border: none;
+  background: transparent;
+  padding: 5px 12px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #0d9488;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.2;
+}
+
+.speed-pill-group.mini .speed-pill {
+  padding: 3px 8px;
+  font-size: 11px;
+}
+
+.speed-pill:hover {
+  background: rgba(13, 148, 136, 0.1);
+  color: #064e3b;
+}
+
+.speed-pill.active {
+  background: #0d9488 !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.28);
+}
+
+.demo-nurse-details {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: auto;
+}
+
+.demo-nurse .speed-pill-group {
+  pointer-events: auto;
+}
+
+/* ========================================================
+   Patient CS ID ↔ HN Directory Card & Search
+   ======================================================== */
+.patient-directory-card {
+  background: #ffffff;
+  border: 1.5px solid #99f6e4;
+  border-radius: 20px;
+  padding: 24px 28px;
+  margin: 24px 0;
+  box-shadow: 0 4px 18px rgba(13, 148, 136, 0.05);
+}
+
+.directory-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+
+.directory-badge {
+  display: inline-block;
+  background: #e6f7f4;
+  color: #0d9488;
+  border: 1px solid #bbf0e5;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 999px;
+  margin-bottom: 8px;
+}
+
+.directory-title-wrap h3 {
+  font-size: 20px;
+  font-weight: 800;
+  color: #064e3b;
+  margin: 4px 0 6px;
+}
+
+.directory-title-wrap p {
+  font-size: 14.5px;
+  color: #475569;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.directory-stats-pills {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.stat-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.stat-pill.linked {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid #a7f3d0;
+}
+
+.stat-pill.total {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #e2e8f0;
+}
+
+.directory-search-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.search-input-wrap {
+  position: relative;
+  flex: 1;
+  min-width: 280px;
+  display: flex;
+  align-items: center;
+}
+
+.search-input-wrap .search-icon {
+  position: absolute;
+  left: 14px;
+  font-size: 16px;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.directory-search-input {
+  width: 100%;
+  padding: 12px 14px 12px 42px;
+  font-size: 15px;
+  border: 1.5px solid #cce5dc;
+  border-radius: 12px;
+  background: #fbfdfc;
+  color: #064e3b;
+  font-weight: 600;
+  outline: none;
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+.directory-search-input:focus {
+  border-color: #0d9488;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.15);
+}
+
+.search-clear-btn {
+  position: absolute;
+  right: 12px;
+  background: #e2e8f0;
+  border: none;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 700;
+  color: #475569;
+  padding: 4px 8px;
+  cursor: pointer;
+}
+
+.search-count-badge {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0d9488;
+  background: #f0fdf9;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid #ccfbf1;
+}
+
+.directory-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  margin: 0;
+}
+
+.directory-table thead th {
+  background: #f0fdf9;
+  color: #064e3b;
+  font-weight: 800;
+  font-size: 13.5px;
+  padding: 12px 14px;
+  border-bottom: 2px solid #bbf0e5;
+  text-align: left;
+}
+
+.directory-table tbody tr {
+  transition: background 0.15s ease;
+}
+
+.directory-table tbody tr:hover {
+  background: #f9fdfb;
+}
+
+.directory-table tbody td {
+  padding: 12px 14px;
+  font-size: 14px;
+  border-bottom: 1px solid #eef3f1;
+  vertical-align: middle;
+}
+
+.empty-directory-cell {
+  text-align: center;
+  padding: 28px !important;
+  color: #64748b;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.cs-id-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #eef7f4;
+  padding: 4px 8px;
+  border-radius: 8px;
+  border: 1px solid #c2ece2;
+}
+
+.cs-id-pill code {
+  font-size: 13px;
+  font-weight: 800;
+  color: #0d9488;
+}
+
+.copy-mini-btn {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 2px;
+  line-height: 1;
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+.copy-mini-btn:hover {
+  opacity: 1;
+  transform: scale(1.15);
+}
+
+.hn-text {
+  color: #0284c7;
+  font-weight: 800;
+  font-size: 14px;
+}
+
+.name-text {
+  color: #0f172a;
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.text-muted {
+  color: #94a3b8;
+  font-size: 13px;
+  font-style: italic;
+}
+
+.status-pill {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 700;
+  padding: 4px 10px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.status-pill.linked {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+}
+
+.status-pill.unlinked {
+  background: #fffbeb;
+  color: #d97706;
+  border: 1px solid #fde68a;
+}
+
+.directory-actions-cell {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.dir-action-btn {
+  padding: 6px 10px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.dir-action-btn.edit {
+  background: #ffffff;
+  color: #0d9488;
+  border: 1px solid #0d9488;
+}
+
+.dir-action-btn.edit:hover {
+  background: #0d9488;
+  color: #ffffff;
+}
+
+.dir-action-btn.view {
+  background: #f0fdf9;
+  color: #047857;
+  border: 1px solid #bbf0e5;
+}
+
+.dir-action-btn.view:hover {
+  background: #047857;
+  color: #ffffff;
+}

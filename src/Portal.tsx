@@ -42,6 +42,8 @@ type ConfidentialPatientLink = {
   updatedAt: string;
 };
 
+export type SpeechSpeed = 'slowest' | 'slow' | 'normal';
+
 const endpoint =
   import.meta.env.VITE_REPORT_API_URL ||
   'https://script.google.com/macros/s/AKfycbwC6UwfNGzje7aW0EbOTXVEmOoI1l2vNko_PeBXfwurUGFXoAPiYlGA9NI4DT5tk38eBw/exec';
@@ -258,6 +260,20 @@ export default function Portal() {
   const [linkFullNameInput, setLinkFullNameInput] = useState('');
   const [linkBusy, setLinkBusy] = useState(false);
 
+  // Search filter for Patient CS ID ↔ HN Directory
+  const [directorySearch, setDirectorySearch] = useState('');
+
+  // Nurse Nong Four Speech Speed ('slowest' = 0.65x, 'slow' = 0.8x, 'normal' = 1.0x)
+  const [speechSpeed, setSpeechSpeed] = useState<SpeechSpeed>(() => {
+    try {
+      const saved = localStorage.getItem('cathsim:speech-speed');
+      if (saved === 'slowest' || saved === 'slow' || saved === 'normal') return saved;
+    } catch {}
+    return 'normal';
+  });
+
+  const speechPlaybackRate = speechSpeed === 'slowest' ? 0.65 : speechSpeed === 'slow' ? 0.8 : 1.0;
+
   const [mode, setMode] = useState<LearningMode>('learn');
   const [deleteConfirm, setDeleteConfirm] = useState(false);
 
@@ -368,11 +384,22 @@ export default function Portal() {
     window.scrollTo({ top: 0, behavior: 'instant' });
   }, [view, index, isAuthenticated]);
 
+  // Synchronize audio playbackRate in real time when speechSpeed changes
+  useEffect(() => {
+    try {
+      localStorage.setItem('cathsim:speech-speed', speechSpeed);
+    } catch {}
+    if (audio.current) {
+      audio.current.playbackRate = speechPlaybackRate;
+    }
+  }, [speechSpeed, speechPlaybackRate]);
+
   const play = useCallback(() => {
     musicEnabled(true);
     startSound();
     const a = audio.current;
     if (!a) return;
+    a.playbackRate = speechPlaybackRate;
     setAudioError(false);
     setNeedsStart(false);
     setPaused(false);
@@ -383,7 +410,7 @@ export default function Portal() {
         setNeedsStart(true);
         setNarrating(false);
       });
-  }, []);
+  }, [speechPlaybackRate]);
 
   // Audio clip loader
   useEffect(() => {
@@ -401,9 +428,13 @@ export default function Portal() {
 
     a.src = media(`${clip}.mp3`);
     a.load();
+    a.playbackRate = speechPlaybackRate;
     a.play()
       .then(() => {
-        if (gen === generation.current) setNarrating(true);
+        if (gen === generation.current) {
+          a.playbackRate = speechPlaybackRate;
+          setNarrating(true);
+        }
       })
       .catch(() => {
         if (gen === generation.current) setNeedsStart(true);
@@ -412,7 +443,7 @@ export default function Portal() {
     return () => {
       a.pause();
     };
-  }, [clip]);
+  }, [clip, speechPlaybackRate]);
 
   // Handle browser visibility
   useEffect(() => {
@@ -869,6 +900,57 @@ export default function Portal() {
     return ids.map((id) => evaluatePatientProgress(events, id));
   }, [allKnownCsIds, events]);
 
+  // Dedicated Patient Directory combining accounts, progress evaluations, and confidential identity links
+  const patientDirectoryList = useMemo(() => {
+    const allCsSet = new Set<string>();
+    allKnownCsIds.forEach((id) => allCsSet.add(id));
+    Object.keys(confidentialLinks).forEach((id) => allCsSet.add(id));
+    Object.keys(patientAccounts).forEach((id) => allCsSet.add(id));
+    if (allCsSet.size === 0) allCsSet.add('CS-1');
+
+    const list = Array.from(allCsSet).map((csId) => {
+      const rep = allPatientReports.find((r) => r.csId === csId);
+      const conf = confidentialLinks[csId];
+      const acc = patientAccounts[csId];
+      const isLinked = Boolean(conf && conf.hn && conf.fullName);
+      return {
+        csId,
+        username: acc?.username || '—',
+        hn: conf?.hn || '',
+        fullName: conf?.fullName || '',
+        updatedAt: conf?.updatedAt || rep?.lastDate || '',
+        lastDate: rep?.lastDate || '',
+        scorePercent: rep?.overallScorePercent ?? 0,
+        passed80: rep?.passed80 ?? false,
+        topicsLearned: rep?.topicsLearned ?? 0,
+        confirmedSteps: rep?.confirmedSteps ?? 0,
+        isLinked
+      };
+    });
+
+    list.sort((a, b) => {
+      const numA = parseInt(a.csId.replace(/\D/g, ''), 10) || 0;
+      const numB = parseInt(b.csId.replace(/\D/g, ''), 10) || 0;
+      return numA - numB;
+    });
+
+    return list;
+  }, [allKnownCsIds, allPatientReports, confidentialLinks, patientAccounts]);
+
+  // Filtered Patient Directory by search query
+  const filteredDirectory = useMemo(() => {
+    const q = directorySearch.trim().toLowerCase();
+    if (!q) return patientDirectoryList;
+    return patientDirectoryList.filter((item) => {
+      return (
+        item.csId.toLowerCase().includes(q) ||
+        item.username.toLowerCase().includes(q) ||
+        item.hn.toLowerCase().includes(q) ||
+        item.fullName.toLowerCase().includes(q)
+      );
+    });
+  }, [patientDirectoryList, directorySearch]);
+
   const selectedCsEvents = useMemo(
     () => events.filter((e) => normalizeCsId(e.code) === normalizeCsId(selectedCsId)),
     [events, selectedCsId]
@@ -1047,12 +1129,20 @@ export default function Portal() {
       <audio
         ref={audio}
         preload="auto"
+        onLoadedMetadata={() => {
+          if (audio.current) {
+            audio.current.playbackRate = speechPlaybackRate;
+          }
+        }}
         onEnded={() => {
           setNarrating(false);
           setReady(true);
           setLeft(8);
         }}
         onPlay={() => {
+          if (audio.current) {
+            audio.current.playbackRate = speechPlaybackRate;
+          }
           musicEnabled(true);
           startSound();
           setNarrating(true);
@@ -1446,6 +1536,34 @@ export default function Portal() {
                       สวัสดีค่ะ ดิฉันพยาบาลน้องโฟร์ ยินดีต้อนรับเข้าสู่ CathSim 360 นะคะ ดูภาพสาธิต 3 มิติ
                       ฟังคำแนะนำ แล้วฝึกทำตามไปด้วยกันนะคะ
                     </p>
+
+                    {/* Speed Selection Pills for Nurse Nong Four */}
+                    <div className="nurse-speed-selector welcome-speed-selector">
+                      <span className="speed-title">⚡ ความเร็วเสียงพูดพยาบาลน้องโฟร์:</span>
+                      <div className="speed-pill-group" role="group" aria-label="เลือกความเร็วเสียงพูดพยาบาลน้องโฟร์">
+                        <button
+                          type="button"
+                          className={`speed-pill ${speechSpeed === 'slowest' ? 'active' : ''}`}
+                          onClick={() => setSpeechSpeed('slowest')}
+                        >
+                          ช้ามาก (0.65x)
+                        </button>
+                        <button
+                          type="button"
+                          className={`speed-pill ${speechSpeed === 'slow' ? 'active' : ''}`}
+                          onClick={() => setSpeechSpeed('slow')}
+                        >
+                          ช้า (0.8x)
+                        </button>
+                        <button
+                          type="button"
+                          className={`speed-pill ${speechSpeed === 'normal' ? 'active' : ''}`}
+                          onClick={() => setSpeechSpeed('normal')}
+                        >
+                          ปกติ (1.0x)
+                        </button>
+                      </div>
+                    </div>
                     {needsStart ? (
                       <button className="portal-primary welcome-start" onClick={play}>
                         แตะเพื่อเริ่มฟังเสียงพยาบาลน้องโฟร์
@@ -1532,7 +1650,35 @@ export default function Portal() {
                     />
                     <div className="demo-nurse">
                       <NurseCath speaking={narrating} compact />
-                      <span>{narrating ? 'พยาบาลน้องโฟร์กำลังพูด...' : 'พยาบาลน้องโฟร์'}</span>
+                      <div className="demo-nurse-details">
+                        <span>{narrating ? 'พยาบาลน้องโฟร์กำลังพูด...' : 'พยาบาลน้องโฟร์'}</span>
+                        <div className="speed-pill-group mini" role="group" aria-label="ความเร็วเสียงพยาบาลน้องโฟร์">
+                          <button
+                            type="button"
+                            className={`speed-pill ${speechSpeed === 'slowest' ? 'active' : ''}`}
+                            onClick={() => setSpeechSpeed('slowest')}
+                            title="ช้ามาก (0.65x)"
+                          >
+                            ช้ามาก
+                          </button>
+                          <button
+                            type="button"
+                            className={`speed-pill ${speechSpeed === 'slow' ? 'active' : ''}`}
+                            onClick={() => setSpeechSpeed('slow')}
+                            title="ช้า (0.8x)"
+                          >
+                            ช้า
+                          </button>
+                          <button
+                            type="button"
+                            className={`speed-pill ${speechSpeed === 'normal' ? 'active' : ''}`}
+                            onClick={() => setSpeechSpeed('normal')}
+                            title="ปกติ (1.0x)"
+                          >
+                            ปกติ
+                          </button>
+                        </div>
+                      </div>
                     </div>
 
                     {/* In CathChallenge mode: show ONLY the demonstration stage + compact action bar */}
@@ -1621,6 +1767,34 @@ export default function Portal() {
                           <button onClick={play}>ลองเล่นเสียงใหม่</button>
                         </div>
                       )}
+
+                      {/* Nurse Nong Four Speech Speed Control */}
+                      <div className="nurse-speed-selector lesson-speed-selector">
+                        <span className="speed-title">⚡ ความเร็วเสียงพูด:</span>
+                        <div className="speed-pill-group" role="group" aria-label="เลือกความเร็วเสียงพูดพยาบาลน้องโฟร์">
+                          <button
+                            type="button"
+                            className={`speed-pill ${speechSpeed === 'slowest' ? 'active' : ''}`}
+                            onClick={() => setSpeechSpeed('slowest')}
+                          >
+                            ช้ามาก (0.65x)
+                          </button>
+                          <button
+                            type="button"
+                            className={`speed-pill ${speechSpeed === 'slow' ? 'active' : ''}`}
+                            onClick={() => setSpeechSpeed('slow')}
+                          >
+                            ช้า (0.8x)
+                          </button>
+                          <button
+                            type="button"
+                            className={`speed-pill ${speechSpeed === 'normal' ? 'active' : ''}`}
+                            onClick={() => setSpeechSpeed('normal')}
+                          >
+                            ปกติ (1.0x)
+                          </button>
+                        </div>
+                      </div>
 
                       {/* Step Action Buttons */}
                       {!finished ? (
@@ -1861,6 +2035,156 @@ export default function Portal() {
                             </span>
                           )}
                         </div>
+                      </div>
+                    </div>
+
+                    {/* Dedicated Patient CS ID ↔ HN Directory Card with Live Search */}
+                    <div className="patient-directory-card">
+                      <div className="directory-card-header">
+                        <div className="directory-title-wrap">
+                          <span className="directory-badge">📋 ชีทแยกรายชื่อและข้อมูลเชื่อมโยง</span>
+                          <h3>ชีทข้อมูลผู้ป่วย CS ID ↔ HN และ ชื่อ - นามสกุล</h3>
+                          <p>
+                            ค้นหาและตรวจสอบการผูกรหัส <strong>CS ID</strong> เข้ากับ <strong>HN</strong> และ{' '}
+                            <strong>ชื่อ - นามสกุล</strong> เพื่อค้นหาดูได้ง่าย รวดเร็ว และเป็นสัดส่วน (ซิงค์ตรงกับ Google Sheet แท็บ <code>CS_HN_Directory</code>)
+                          </p>
+                        </div>
+                        <div className="directory-stats-pills">
+                          <span className="stat-pill linked">
+                            ✓ ผูกข้อมูลแล้ว {Object.keys(confidentialLinks).length} ราย
+                          </span>
+                          <span className="stat-pill total">
+                            ผู้ป่วยทั้งหมด {patientDirectoryList.length} ราย
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="directory-search-bar">
+                        <div className="search-input-wrap">
+                          <span className="search-icon">🔍</span>
+                          <input
+                            type="text"
+                            value={directorySearch}
+                            onChange={(e) => setDirectorySearch(e.target.value)}
+                            placeholder="พิมพ์ค้นหาด้วย CS ID (เช่น CS-1), HN, หรือ ชื่อ-นามสกุล คนไข้..."
+                            className="directory-search-input"
+                          />
+                          {directorySearch && (
+                            <button
+                              type="button"
+                              className="search-clear-btn"
+                              onClick={() => setDirectorySearch('')}
+                            >
+                              ✕ ล้างคำค้น
+                            </button>
+                          )}
+                        </div>
+                        <span className="search-count-badge">
+                          ผลการค้นหา: {filteredDirectory.length} ราย
+                        </span>
+                      </div>
+
+                      <div className="table-scroll directory-table-wrap">
+                        <table className="directory-table">
+                          <thead>
+                            <tr>
+                              <th style={{ width: '60px' }}>ลำดับ</th>
+                              <th style={{ width: '130px' }}>CS ID</th>
+                              <th>บัญชีผู้ใช้ (Username)</th>
+                              <th>HN (โรงพยาบาล)</th>
+                              <th>ชื่อ - นามสกุล ผู้ป่วย</th>
+                              <th>วันที่เชื่อมโยงล่าสุด</th>
+                              <th>สถานะการเชื่อมต่อ</th>
+                              <th style={{ width: '220px' }}>การจัดการ</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {filteredDirectory.length === 0 ? (
+                              <tr>
+                                <td colSpan={8} className="empty-directory-cell">
+                                  {directorySearch
+                                    ? `ไม่พบข้อมูลผู้ป่วยที่ตรงกับคำค้นหา "${directorySearch}"`
+                                    : 'ยังไม่มีข้อมูลผู้ป่วยในระบบ'}
+                                </td>
+                              </tr>
+                            ) : (
+                              filteredDirectory.map((item, idx) => (
+                                <tr key={item.csId} className={item.isLinked ? 'row-linked' : 'row-unlinked'}>
+                                  <td>{idx + 1}</td>
+                                  <td>
+                                    <span className="cs-id-pill">
+                                      <code>{item.csId}</code>
+                                      <button
+                                        type="button"
+                                        className="copy-mini-btn"
+                                        title="คัดลอก CS ID"
+                                        onClick={() => {
+                                          navigator.clipboard?.writeText(item.csId);
+                                          setNotice(`คัดลอกรหัส ${item.csId} เรียบร้อยแล้วค่ะ`);
+                                        }}
+                                      >
+                                        📋
+                                      </button>
+                                    </span>
+                                  </td>
+                                  <td>{item.username || '—'}</td>
+                                  <td>
+                                    {item.hn ? (
+                                      <strong className="hn-text">{item.hn}</strong>
+                                    ) : (
+                                      <span className="text-muted">ยังไม่ได้ระบุ HN</span>
+                                    )}
+                                  </td>
+                                  <td>
+                                    {item.fullName ? (
+                                      <span className="name-text">{item.fullName}</span>
+                                    ) : (
+                                      <span className="text-muted">ยังไม่ได้ระบุชื่อ</span>
+                                    )}
+                                  </td>
+                                  <td>{formatThaiDateTime(item.updatedAt || item.lastDate)}</td>
+                                  <td>
+                                    <span className={`status-pill ${item.isLinked ? 'linked' : 'unlinked'}`}>
+                                      {item.isLinked ? '✓ ผูกข้อมูลแล้ว' : 'รอผูก HN'}
+                                    </span>
+                                  </td>
+                                  <td>
+                                    <div className="directory-actions-cell">
+                                      <button
+                                        type="button"
+                                        className="dir-action-btn edit"
+                                        onClick={() => {
+                                          setLinkCsIdInput(item.csId);
+                                          setLinkHnInput(item.hn || '');
+                                          setLinkFullNameInput(item.fullName || '');
+                                          setNotice(`เลือกผู้ป่วย ${item.csId} เพื่อกรอกหรือแก้ไขข้อมูลแล้วค่ะ`);
+                                          const el = document.querySelector('.admin-confidential-link-card');
+                                          el?.scrollIntoView({ behavior: 'smooth' });
+                                        }}
+                                        title="แก้ไขหรือผูกข้อมูลคนไข้รายนี้"
+                                      >
+                                        ✏️ ผูกข้อมูล
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="dir-action-btn view"
+                                        onClick={() => {
+                                          setSelectedCsId(item.csId);
+                                          setReportCsInput(item.csId);
+                                          const el = document.querySelector('.patient-full-report-card');
+                                          el?.scrollIntoView({ behavior: 'smooth' });
+                                        }}
+                                        title="ดูรายงานผลการเรียนรู้"
+                                      >
+                                        📊 ดูผล
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              ))
+                            )}
+                          </tbody>
+                        </table>
                       </div>
                     </div>
 

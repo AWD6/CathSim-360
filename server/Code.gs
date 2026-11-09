@@ -1,10 +1,11 @@
-// Bind this project to the private CathSim workbook. Patient HN and full names are stored ONLY in ConfidentialIdentity for Admin and never exposed to patients.
+// Bind this project to the private CathSim workbook. Patient HN and full names are stored ONLY in CS_HN_Directory (ConfidentialIdentity) for Admin and never exposed to patients.
 function setup() {
   const ss=SpreadsheetApp.getActiveSpreadsheet();
   const headers={
     Accounts:['code','role','allowed_codes','secret_hash','enabled','username'],
     PatientSummary:['cs_id','username','last_learned_at','topics_learned','confirmed_steps','total_steps','score_percent','pass_status_80','learned_topics_list','completions_summary','total_completions'],
     StepEvents:['id','participant_code','topic','step_index','trigger','seconds','timestamp','mode','actions'],
+    CS_HN_Directory:['cs_id','hn','full_name','updated_at','confidential_policy'],
     ConfidentialIdentity:['cs_id','hn','full_name','updated_at','confidential_policy']
   };
   Object.keys(headers).forEach(name=>{const s=ss.getSheetByName(name)||ss.insertSheet(name);if(!s.getLastRow())s.appendRow(headers[name]);s.setFrozenRows(1);});
@@ -12,7 +13,7 @@ function setup() {
 }
 function cleanupUnusedSheets() {
   const ss=SpreadsheetApp.getActiveSpreadsheet();
-  const keep=['Accounts','PatientSummary','StepEvents','ConfidentialIdentity'];
+  const keep=['Accounts','PatientSummary','StepEvents','CS_HN_Directory','ConfidentialIdentity'];
   ss.getSheets().forEach(sh=>{
     if(!keep.includes(sh.getName())&&ss.getSheets().length>1){
       ss.deleteSheet(sh);
@@ -43,11 +44,17 @@ function events_(a,csFilter){const s=book_().getSheetByName('StepEvents');if(!s)
 function patientEvents_(code){const s=book_().getSheetByName('StepEvents');if(!s)return [];return s.getDataRange().getValues().slice(1).filter(r=>r[1]===code).slice(-500).map(r=>({id:r[0],code:r[1],topic:r[2],step:r[3],trigger:r[4],seconds:r[5],time:r[6],mode:r[7]||'learn',actions:r[8]?JSON.parse(r[8]):[]}));}
 function confidentialLinks_(a){
   if(!a||a.role!=='admin')return [];
-  const s=book_().getSheetByName('ConfidentialIdentity');
+  const book=book_();
+  const s=book.getSheetByName('CS_HN_Directory')||book.getSheetByName('ConfidentialIdentity');
   if(!s||!s.getDataRange)return [];
   const vals=s.getDataRange().getValues();
   if(!Array.isArray(vals))return [];
-  return vals.slice(1).filter(r=>canRead_(a,r[0])).map(r=>({csId:r[0],hn:r[1],fullName:r[2],updatedAt:r[3]}));
+  return vals.slice(1).filter(r=>r[0]&&canRead_(a,String(r[0]))).map(r=>({
+    csId:String(r[0]).trim().toUpperCase(),
+    hn:String(r[1]||'').trim(),
+    fullName:String(r[2]||'').trim(),
+    updatedAt:String(r[3]||'').trim()
+  }));
 }
 function updatePatientSummary_(code){
   try{
@@ -149,13 +156,22 @@ function doPost(e){
       const fullName=String(b.fullName||'').trim();
       if(!/^CS-[A-Z0-9]{1,28}$/.test(targetCs)||!hn||!fullName||hn.length>60||fullName.length>120)throw Error('Invalid link data');
       const book=book_();
-      let sh=book.getSheetByName('ConfidentialIdentity');
-      if(!sh&&book.insertSheet){sh=book.insertSheet('ConfidentialIdentity');sh.appendRow(['cs_id','hn','full_name','updated_at','confidential_policy']);if(sh.setFrozenRows)sh.setFrozenRows(1);}
-      if(sh){
-        const all=sh.getDataRange().getValues();
-        for(let i=all.length-1;i>0;i--){if(all[i][0]===targetCs&&sh.deleteRow)sh.deleteRow(i+1);}
-        sh.appendRow([targetCs,hn,fullName,new Date().toISOString(),'CONFIDENTIAL_ADMIN_ONLY_DO_NOT_PUBLISH']);
-      }
+      const targetSheets=['CS_HN_Directory','ConfidentialIdentity'];
+      targetSheets.forEach(name=>{
+        let sh=book.getSheetByName(name);
+        if(!sh&&book.insertSheet){
+          sh=book.insertSheet(name);
+          sh.appendRow(['cs_id','hn','full_name','updated_at','confidential_policy']);
+          if(sh.setFrozenRows)sh.setFrozenRows(1);
+        }
+        if(sh){
+          const all=sh.getDataRange().getValues();
+          for(let i=all.length-1;i>0;i--){
+            if(String(all[i][0]||'').trim().toUpperCase()===targetCs&&sh.deleteRow)sh.deleteRow(i+1);
+          }
+          sh.appendRow([targetCs,hn,fullName,new Date().toISOString(),'CONFIDENTIAL_ADMIN_ONLY_DO_NOT_PUBLISH']);
+        }
+      });
       return out_({ok:true,csId:targetCs,confidentialLinks:confidentialLinks_(a)});
     }
     if(b.action==='registerPatient'){
