@@ -60,6 +60,44 @@ export const topics: Topic[] = [
     ]
   },
   {
+    id: 'hygiene',
+    title: 'ทำความสะอาดอวัยวะเพศ',
+    description: 'หุ่นจำลองเสมือนจริงทั้งชายและหญิง ใช้สบู่อ่อนล้างอย่างอ่อนโยน',
+    sources: [0, 2],
+    steps: [
+      S(
+        'ล้างมือให้สะอาด เตรียมน้ำสะอาด สบู่อ่อน และผ้าสะอาดค่ะ จัดความเป็นส่วนตัวและประคองสายไว้ ไม่ดึงสายระหว่างเช็ดทำความสะอาดนะคะ',
+        'เตรียมสบู่อ่อน น้ำสะอาด และประคองสาย',
+        'ขั้นที่หนึ่ง ล้างมือ เตรียมสบู่อ่อน น้ำสะอาด ผ้าสะอาด และประคองสายไว้นะคะ',
+        0
+      ),
+      S(
+        'สำหรับผู้หญิง ให้แยกบริเวณที่ต้องทำความสะอาดอย่างนุ่มนวล ใช้สบู่อ่อนกับน้ำสะอาด ล้างและเช็ดจากด้านหน้าไปด้านหลังค่ะ ใช้ส่วนผ้าที่สะอาดในการเช็ดแต่ละครั้ง ไม่ย้อนจากทวารหนักมาหาสายนะคะ',
+        'ผู้หญิง: ล้างด้วยสบู่อ่อน เช็ดจากด้านหน้าไปด้านหลัง',
+        'ขั้นที่สอง สำหรับผู้หญิง ใช้สบู่อ่อนล้างและเช็ดจากด้านหน้าไปด้านหลัง ไม่เช็ดย้อนกลับค่ะ',
+        1
+      ),
+      S(
+        'สำหรับผู้ชายที่มีหนังหุ้มปลาย ให้รูดเปิดเท่าที่ทำได้โดยไม่ฝืน ใช้สบู่อ่อนกับน้ำสะอาด ทำความสะอาดรอบรูเปิดและสายภายนอกอย่างอ่อนโยน แล้วรูดหนังหุ้มปลายกลับทันทีค่ะ',
+        'ผู้ชาย: ทำความสะอาดด้วยสบู่อ่อน และรูดหนังหุ้มปลายกลับทันที',
+        'ขั้นที่สาม สำหรับผู้ชาย รูดหนังหุ้มปลายเบา ๆ ล้างด้วยสบู่อ่อน แล้วรูดหนังหุ้มปลายกลับทันทีนะคะ',
+        2
+      ),
+      S(
+        'ล้างคราบสบู่ออกด้วยน้ำสะอาดและซับให้แห้งค่ะ ไม่ใช้น้ำยาฆ่าเชื้อเป็นประจำหากไม่ได้สั่งนะคะ ถ้าหนังหุ้มปลายรูดกลับไม่ได้ บวม หรือเจ็บมาก ให้ไปโรงพยาบาลทันทีค่ะ',
+        'ราดน้ำล้างคราบสบู่ ซับให้แห้ง และตรวจความสบาย',
+        'ขั้นที่สี่ ราดน้ำสะอาดล้างฟองสบู่ออกให้หมด แล้วใช้ผ้าสะอาดซับให้แห้งค่ะ',
+        3
+      ),
+      S(
+        'โรงพยาบาลมหาราชนครเชียงใหม่แนะนำให้ทำความสะอาดวันละสามครั้ง ปรับตามเวลาตื่น และทำเพิ่มเมื่อเปื้อนค่ะ ไม่จำเป็นต้องยึดเวลาตายตัวนะคะ',
+        'ทำความสะอาดวันละ 3 ครั้ง ปรับตามเวลาตื่น และเมื่อเปื้อน',
+        'ขั้นที่ห้า ทำความสะอาดวันละสามครั้งตามเวลาตื่น และทำเพิ่มเมื่อเปื้อนนะคะ',
+        4
+      )
+    ]
+  },
+  {
     id: 'position',
     title: 'ดูแลและจัดตำแหน่งถุง',
     description: 'เทียบระดับถุงกับระดับเอวและกระเพาะปัสสาวะ ไม่แตะพื้น',
@@ -220,40 +258,22 @@ export const topics: Topic[] = [
     ]
   },
   {
-    id: 'hygiene',
-    title: 'ทำความสะอาดอวัยวะเพศ',
-    description: 'หุ่นจำลองเสมือนจริงทั้งชายและหญิง ใช้สบู่อ่อนล้างอย่างอ่อนโยน',
-    sources: [0, 2],
+    id: 'followup',
+    title: 'นัดเปลี่ยนสาย',
+    description: 'วางแผนนัดหมายตามแนวทางโรงพยาบาลมหาราชนครเชียงใหม่',
+    sources: [0, 1],
     steps: [
       S(
-        'ล้างมือให้สะอาด เตรียมน้ำสะอาด สบู่อ่อน และผ้าสะอาดค่ะ จัดความเป็นส่วนตัวและประคองสายไว้ ไม่ดึงสายระหว่างเช็ดทำความสะอาดนะคะ',
-        'เตรียมสบู่อ่อน น้ำสะอาด และประคองสาย',
-        'ขั้นที่หนึ่ง ล้างมือ เตรียมสบู่อ่อน น้ำสะอาด ผ้าสะอาด และประคองสายไว้นะคะ',
+        'โรงพยาบาลมหาราชนครเชียงใหม่ให้นัดเปลี่ยนสายที่สถานพยาบาลใกล้บ้านทุกสองสัปดาห์ หรือตามใบนัดค่ะ ผู้ป่วยและผู้ดูแลไม่ถอดหรือเปลี่ยนสายสวนเองที่บ้านนะคะ',
+        'ตรวจใบนัด เปลี่ยนสายทุก 2 สัปดาห์',
+        'ขั้นที่หนึ่ง ตรวจวันนัดเปลี่ยนสายที่สถานพยาบาลทุกสองสัปดาห์ ห้ามถอดสายเองนะคะ',
         0
       ),
       S(
-        'สำหรับผู้หญิง ให้แยกบริเวณที่ต้องทำความสะอาดอย่างนุ่มนวล ใช้สบู่อ่อนกับน้ำสะอาด ล้างและเช็ดจากด้านหน้าไปด้านหลังค่ะ ใช้ส่วนผ้าที่สะอาดในการเช็ดแต่ละครั้ง ไม่ย้อนจากทวารหนักมาหาสายนะคะ',
-        'ผู้หญิง: ล้างด้วยสบู่อ่อน เช็ดจากด้านหน้าไปด้านหลัง',
-        'ขั้นที่สอง สำหรับผู้หญิง ใช้สบู่อ่อนล้างและเช็ดจากด้านหน้าไปด้านหลัง ไม่เช็ดย้อนกลับค่ะ',
+        'หากมีสายหลุด รั่วซึม สายอุดตัน หรือสงสัยการปนเปื้อน ให้ติดต่อทีมรักษาก่อนวันนัดได้ทันทีค่ะ ไม่ต้องรอให้ครบกำหนด และไม่ใส่สายที่หลุดกลับเองนะคะ',
+        'พบปัญหาก่อนนัด ให้ติดต่อสถานพยาบาลทันที',
+        'ขั้นที่สอง หากสายหลุด รั่ว หรืออุดตัน ให้ติดต่อสถานพยาบาลทันทีก่อนวันนัดค่ะ',
         1
-      ),
-      S(
-        'สำหรับผู้ชายที่มีหนังหุ้มปลาย ให้รูดเปิดเท่าที่ทำได้โดยไม่ฝืน ใช้สบู่อ่อนกับน้ำสะอาด ทำความสะอาดรอบรูเปิดและสายภายนอกอย่างอ่อนโยน แล้วรูดหนังหุ้มปลายกลับทันทีค่ะ',
-        'ผู้ชาย: ทำความสะอาดด้วยสบู่อ่อน และรูดหนังหุ้มปลายกลับทันที',
-        'ขั้นที่สาม สำหรับผู้ชาย รูดหนังหุ้มปลายเบา ๆ ล้างด้วยสบู่อ่อน แล้วรูดหนังหุ้มปลายกลับทันทีนะคะ',
-        2
-      ),
-      S(
-        'ล้างคราบสบู่ออกด้วยน้ำสะอาดและซับให้แห้งค่ะ ไม่ใช้น้ำยาฆ่าเชื้อเป็นประจำหากไม่ได้สั่งนะคะ ถ้าหนังหุ้มปลายรูดกลับไม่ได้ บวม หรือเจ็บมาก ให้ไปโรงพยาบาลทันทีค่ะ',
-        'ราดน้ำล้างคราบสบู่ ซับให้แห้ง และตรวจความสบาย',
-        'ขั้นที่สี่ ราดน้ำสะอาดล้างฟองสบู่ออกให้หมด แล้วใช้ผ้าสะอาดซับให้แห้งค่ะ',
-        3
-      ),
-      S(
-        'โรงพยาบาลมหาราชนครเชียงใหม่แนะนำให้ทำความสะอาดวันละสามครั้ง ปรับตามเวลาตื่น และทำเพิ่มเมื่อเปื้อนค่ะ ไม่จำเป็นต้องยึดเวลาตายตัวนะคะ',
-        'ทำความสะอาดวันละ 3 ครั้ง ปรับตามเวลาตื่น และเมื่อเปื้อน',
-        'ขั้นที่ห้า ทำความสะอาดวันละสามครั้งตามเวลาตื่น และทำเพิ่มเมื่อเปื้อนนะคะ',
-        4
       )
     ]
   },
@@ -280,26 +300,6 @@ export const topics: Topic[] = [
         'สังเกตอาการร่วม ไม่ตัดสินจากสีอย่างเดียว',
         'ขั้นที่สาม สังเกตอาการผิดปกติร่วม เช่น มีไข้ หรือปวดท้องน้อยนะคะ',
         2
-      )
-    ]
-  },
-  {
-    id: 'followup',
-    title: 'นัดเปลี่ยนสาย',
-    description: 'วางแผนนัดหมายตามแนวทางโรงพยาบาลมหาราชนครเชียงใหม่',
-    sources: [0, 1],
-    steps: [
-      S(
-        'โรงพยาบาลมหาราชนครเชียงใหม่ให้นัดเปลี่ยนสายที่สถานพยาบาลใกล้บ้านทุกสองสัปดาห์ หรือตามใบนัดค่ะ ผู้ป่วยและผู้ดูแลไม่ถอดหรือเปลี่ยนสายสวนเองที่บ้านนะคะ',
-        'ตรวจใบนัด เปลี่ยนสายทุก 2 สัปดาห์',
-        'ขั้นที่หนึ่ง ตรวจวันนัดเปลี่ยนสายที่สถานพยาบาลทุกสองสัปดาห์ ห้ามถอดสายเองนะคะ',
-        0
-      ),
-      S(
-        'หากมีสายหลุด รั่วซึม สายอุดตัน หรือสงสัยการปนเปื้อน ให้ติดต่อทีมรักษาก่อนวันนัดได้ทันทีค่ะ ไม่ต้องรอให้ครบกำหนด และไม่ใส่สายที่หลุดกลับเองนะคะ',
-        'พบปัญหาก่อนนัด ให้ติดต่อสถานพยาบาลทันที',
-        'ขั้นที่สอง หากสายหลุด รั่ว หรืออุดตัน ให้ติดต่อสถานพยาบาลทันทีก่อนวันนัดค่ะ',
-        1
       )
     ]
   },
@@ -344,6 +344,127 @@ export type StepEvent = {
   mode?: LearningMode;
   actions?: string[];
 };
+
+export type TopicProgressSummary = {
+  order: number;
+  topicId: SceneKind;
+  title: string;
+  totalSteps: number;
+  confirmedSteps: number;
+  viewedSteps: number;
+  scorePercent: number;
+  passed: boolean;
+  lastDate: string | null;
+  modes: LearningMode[];
+  actionsCount: number;
+};
+
+export type PatientEvaluationReport = {
+  csId: string;
+  totalSteps: number;
+  confirmedSteps: number;
+  viewedSteps: number;
+  topicsLearned: number;
+  totalTopics: number;
+  overallScorePercent: number;
+  learnedScorePercent: number;
+  passed80: boolean;
+  firstDate: string | null;
+  lastDate: string | null;
+  topicSummaries: TopicProgressSummary[];
+};
+
+export function normalizeCsId(raw: string): string {
+  const cleaned = raw.trim().toUpperCase().replace(/\s+/g, '');
+  if (!cleaned) return '';
+  if (/^\d+$/.test(cleaned)) return `CS-${Number(cleaned)}`;
+  if (/^CS\d+$/.test(cleaned)) return `CS-${Number(cleaned.slice(2))}`;
+  if (/^CS-[0-9]+$/.test(cleaned)) return `CS-${Number(cleaned.slice(3))}`;
+  if (cleaned.startsWith('CS-')) return cleaned.replace(/[^A-Z0-9-]/g, '');
+  return `CS-${cleaned.replace(/[^A-Z0-9-]/g, '')}`;
+}
+
+export function isValidCsId(csId: string): boolean {
+  return /^CS-[A-Z0-9]{1,28}$/.test(csId);
+}
+
+export function evaluatePatientProgress(events: StepEvent[], rawCsId: string): PatientEvaluationReport {
+  const csId = normalizeCsId(rawCsId);
+  const userEvents = events.filter((e) => normalizeCsId(e.code) === csId);
+  const totalSteps = topics.reduce((sum, t) => sum + t.steps.length, 0);
+
+  let totalConfirmed = 0;
+  let totalViewed = 0;
+  let topicsLearned = 0;
+  let firstDate: string | null = null;
+  let lastDate: string | null = null;
+
+  for (const ev of userEvents) {
+    if (!firstDate || ev.time < firstDate) firstDate = ev.time;
+    if (!lastDate || ev.time > lastDate) lastDate = ev.time;
+  }
+
+  const topicSummaries: TopicProgressSummary[] = topics.map((t, idx) => {
+    const tEvents = userEvents.filter((e) => e.topic === t.id);
+    const confirmedSet = new Set<number>();
+    const viewedSet = new Set<number>();
+    const modesSet = new Set<LearningMode>();
+    let topicLastDate: string | null = null;
+    let actionsCount = 0;
+
+    for (const ev of tEvents) {
+      if (ev.step >= 0 && ev.step < t.steps.length) {
+        viewedSet.add(ev.step);
+        if (ev.trigger === 'confirmed') {
+          confirmedSet.add(ev.step);
+        }
+      }
+      if (ev.mode) modesSet.add(ev.mode);
+      if (ev.actions) actionsCount += ev.actions.length;
+      if (!topicLastDate || ev.time > topicLastDate) topicLastDate = ev.time;
+    }
+
+    const confirmedSteps = confirmedSet.size;
+    const viewedSteps = viewedSet.size;
+    if (viewedSteps > 0) topicsLearned += 1;
+    totalConfirmed += confirmedSteps;
+    totalViewed += viewedSteps;
+
+    const scorePercent = t.steps.length > 0 ? Math.round((confirmedSteps / t.steps.length) * 100) : 0;
+    return {
+      order: idx + 1,
+      topicId: t.id,
+      title: t.title,
+      totalSteps: t.steps.length,
+      confirmedSteps,
+      viewedSteps,
+      scorePercent,
+      passed: scorePercent >= 80,
+      lastDate: topicLastDate,
+      modes: Array.from(modesSet),
+      actionsCount
+    };
+  });
+
+  const overallScorePercent = totalSteps > 0 ? Math.round((totalConfirmed / totalSteps) * 100) : 0;
+  const learnedScorePercent = totalViewed > 0 ? Math.round((totalConfirmed / totalViewed) * 100) : 0;
+  const passed80 = overallScorePercent >= 80;
+
+  return {
+    csId,
+    totalSteps,
+    confirmedSteps: totalConfirmed,
+    viewedSteps: totalViewed,
+    topicsLearned,
+    totalTopics: topics.length,
+    overallScorePercent,
+    learnedScorePercent,
+    passed80,
+    firstDate,
+    lastDate,
+    topicSummaries
+  };
+}
 
 export function countdownTick(left: number, ready: boolean, paused: boolean, visible: boolean) {
   return ready && !paused && visible ? Math.max(0, left - 1) : left;
