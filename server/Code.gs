@@ -37,8 +37,10 @@ function patientEvents_(code){const s=book_().getSheetByName('StepEvents');if(!s
 function confidentialLinks_(a){
   if(!a||a.role!=='admin')return [];
   const s=book_().getSheetByName('ConfidentialIdentity');
-  if(!s)return [];
-  return s.getDataRange().getValues().slice(1).filter(r=>canRead_(a,r[0])).map(r=>({csId:r[0],hn:r[1],fullName:r[2],updatedAt:r[3]}));
+  if(!s||!s.getDataRange)return [];
+  const vals=s.getDataRange().getValues();
+  if(!Array.isArray(vals))return [];
+  return vals.slice(1).filter(r=>canRead_(a,r[0])).map(r=>({csId:r[0],hn:r[1],fullName:r[2],updatedAt:r[3]}));
 }
 function updatePatientSummary_(code){
   try{

@@ -5,10 +5,19 @@ import vm from 'node:vm';
 import {createHash,randomUUID} from 'node:crypto';
 function fixture(){
  const sha=(s:string)=>createHash('sha256').update(s).digest('hex');
- const data:Record<string,unknown[][]>={Accounts:[['code','role','allowed_codes','secret_hash','enabled'],['CS-AAAAAA','patient','CS-AAAAAA',sha('CS-AAAAAA:keyA'),true],['CG-AAAAAA','caregiver','CS-AAAAAA',sha('CG-AAAAAA:keyC'),true]],Attempts:[['id','participant_code','lesson','correct','seconds','mode','timestamp'],[randomUUID(),'CS-BBBBBB','hands',true,8,'challenge','2026-11-08']]};
- data.Accounts.push(['AD-AAAAAA','admin','CS-AAAAAA',sha('AD-AAAAAA:keyD'),true]);
- data.StepEvents=[['id','participant_code','topic','step_index','trigger','seconds','timestamp']];
- const cache=new Map();const sheets={getSheetByName:(name:string)=>({getDataRange:()=>({getValues:()=>data[name]}),appendRow:(r:unknown[])=>data[name].push(r),deleteRow:(i:number)=>data[name].splice(i-1,1)})};
+ const data:Record<string,unknown[][]>={
+  Accounts:[['code','role','allowed_codes','secret_hash','enabled','username'],['CS-AAAAAA','patient','CS-AAAAAA',sha('CS-AAAAAA:keyA'),true,'userA'],['CG-AAAAAA','caregiver','CS-AAAAAA',sha('CG-AAAAAA:keyC'),true,'userC']],
+  Attempts:[['id','participant_code','lesson','correct','seconds','mode','timestamp'],[randomUUID(),'CS-BBBBBB','hands',true,8,'challenge','2026-11-08']],
+  StepEvents:[['id','participant_code','topic','step_index','trigger','seconds','timestamp','mode','actions']],
+  ConfidentialIdentity:[['cs_id','hn','full_name','updated_at','confidential_policy']],
+  PatientSummary:[['cs_id','username','last_learned_at','topics_learned','confirmed_steps','total_steps','score_percent','pass_status_80','learned_topics_list']]
+ };
+ data.Accounts.push(['AD-AAAAAA','admin','CS-AAAAAA',sha('AD-AAAAAA:keyD'),true,'admin']);
+ const cache=new Map();
+ const sheets={
+   getSheetByName:(name:string)=>data[name]?({getDataRange:()=>({getValues:()=>data[name]}),appendRow:(r:unknown[])=>data[name].push(r),deleteRow:(i:number)=>data[name].splice(i-1,1)}):null,
+   insertSheet:(name:string)=>{data[name]=data[name]||[];return sheets.getSheetByName(name);}
+ };
  const ctx=vm.createContext({PropertiesService:{getScriptProperties:()=>({getProperty:()=>''})},SpreadsheetApp:{openById:()=>sheets},CacheService:{getScriptCache:()=>({get:(k:string)=>cache.get(k),put:(k:string,v:string)=>cache.set(k,v),remove:(k:string)=>cache.delete(k)})},Utilities:{DigestAlgorithm:{SHA_256:1},computeDigest:(_:number,s:string)=>Array.from(createHash('sha256').update(s).digest()),getUuid:randomUUID},ContentService:{MimeType:{JSON:1},createTextOutput:(s:string)=>({setMimeType:()=>s})},LockService:{getScriptLock:()=>({waitLock:()=>{},releaseLock:()=>{}})}});
  vm.runInContext(fs.readFileSync(new URL('../server/Code.gs',import.meta.url),'utf8'),ctx);
  return {data,call:(body:unknown)=>JSON.parse(ctx.doPost({postData:{contents:JSON.stringify(body)}}))};
