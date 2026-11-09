@@ -3,14 +3,21 @@ function setup() {
   const ss=SpreadsheetApp.getActiveSpreadsheet();
   const headers={
     Accounts:['code','role','allowed_codes','secret_hash','enabled','username'],
-    Attempts:['id','participant_code','lesson','correct','seconds','mode','timestamp'],
-    StepEvents:['id','participant_code','topic','step_index','trigger','seconds','timestamp','mode','actions'],
     PatientSummary:['cs_id','username','last_learned_at','topics_learned','confirmed_steps','total_steps','score_percent','pass_status_80','learned_topics_list','completions_summary','total_completions'],
-    ConfidentialIdentity:['cs_id','hn','full_name','updated_at','confidential_policy'],
-    Observations:['participant_code','lesson','observed_at','assessor_code','result','catheter_days','confirmed_cauti']
+    StepEvents:['id','participant_code','topic','step_index','trigger','seconds','timestamp','mode','actions'],
+    ConfidentialIdentity:['cs_id','hn','full_name','updated_at','confidential_policy']
   };
   Object.keys(headers).forEach(name=>{const s=ss.getSheetByName(name)||ss.insertSheet(name);if(!s.getLastRow())s.appendRow(headers[name]);s.setFrozenRows(1);});
   PropertiesService.getScriptProperties().setProperty('SHEET_ID',ss.getId());
+}
+function cleanupUnusedSheets() {
+  const ss=SpreadsheetApp.getActiveSpreadsheet();
+  const keep=['Accounts','PatientSummary','StepEvents','ConfidentialIdentity'];
+  ss.getSheets().forEach(sh=>{
+    if(!keep.includes(sh.getName())&&ss.getSheets().length>1){
+      ss.deleteSheet(sh);
+    }
+  });
 }
 function digest_(s){return Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,s).map(b=>('0'+(b&255).toString(16)).slice(-2)).join('');}
 function issueAccount(code,role,allowedCodes,customPin){
