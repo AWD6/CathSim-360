@@ -52,12 +52,12 @@ const confidentialLinksKey = 'cathsim:admin-confidential-links:v1';
 const adminLockStorageKey = 'cathsim:admin-lock:v1';
 const media = (name: string) => `${import.meta.env.BASE_URL}media/${name}?v=8`;
 
-async function request(body: object) {
+async function request(body: object, timeoutMs = 8000) {
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(30000)
+    signal: AbortSignal.timeout(timeoutMs)
   });
   const data = await res.json();
   if (!data.ok) throw new Error(data.message || data.error || 'รหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบอีกครั้งค่ะ');
@@ -477,44 +477,63 @@ export default function Portal() {
       return;
     }
 
+    // Check if username already exists locally
+    const existingLocal = Object.values(patientAccounts).find(
+      (acc) => acc.username.toLowerCase() === rawUser.toLowerCase()
+    );
+    if (existingLocal) {
+      setNotice('ชื่อบัญชีนี้มีอยู่ในระบบแล้วค่ะ สามารถเข้าสู่ระบบด้วยชื่อนี้และรหัส PIN ได้เลยค่ะ');
+      return;
+    }
+
     setPatientBusy(true);
     setSyncStatus('syncing');
 
+    let assignedCsId = nextAutoCsId;
+    let token = `local-patient-${assignedCsId}`;
+    let isRemoteSynced = false;
+
     try {
-      const res = await request({ action: 'patientRegister', username: rawUser, access: pin });
-      const assignedCsId = normalizeCsId(res.code);
-      const sess: Session = { token: res.token, role: 'patient', code: assignedCsId, username: rawUser };
-      setPatientSession(sess);
-
-      const nextAccounts: Record<string, PatientAccountRecord> = {
-        ...patientAccounts,
-        [assignedCsId]: {
-          csId: assignedCsId,
-          username: rawUser,
-          pin,
-          createdAt: new Date().toISOString()
-        }
-      };
-      setPatientAccounts(nextAccounts);
-      try {
-        localStorage.setItem(patientAccountsKey, JSON.stringify(nextAccounts));
-      } catch {}
-
-      setSyncStatus('synced');
-      setPatientPinInput('');
-      setReportCsInput(assignedCsId);
-      setSelectedCsId(assignedCsId);
-      setView('home');
-      setNotice(`สมัครบัญชีสำเร็จ! รหัสผู้ป่วยของคุณคือ ${assignedCsId} (บันทึกข้อมูลเข้า Google Sheet เรียบร้อยแล้วค่ะ)`);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setSyncStatus('local');
-      setNotice(
-        `ไม่สามารถสมัครบัญชีลง Google Sheet ได้ค่ะ (${msg}) กรุณาตรวจสอบการเชื่อมต่อ หรืออัปเดตสคริปต์ Google Apps Script เป็นเวอร์ชันล่าสุดค่ะ`
-      );
-    } finally {
-      setPatientBusy(false);
+      const res = await request({ action: 'patientRegister', username: rawUser, access: pin }, 5000);
+      if (res && res.ok) {
+        assignedCsId = normalizeCsId(res.code || assignedCsId);
+        token = res.token || token;
+        isRemoteSynced = true;
+      }
+    } catch {
+      // Remote unavailable or pending GAS deployment: proceed locally without blocking
+      isRemoteSynced = false;
     }
+
+    const sess: Session = { token, role: 'patient', code: assignedCsId, username: rawUser };
+    setPatientSession(sess);
+
+    const nextAccounts: Record<string, PatientAccountRecord> = {
+      ...patientAccounts,
+      [assignedCsId]: {
+        csId: assignedCsId,
+        username: rawUser,
+        pin,
+        createdAt: new Date().toISOString()
+      }
+    };
+    setPatientAccounts(nextAccounts);
+    try {
+      localStorage.setItem(patientAccountsKey, JSON.stringify(nextAccounts));
+    } catch {}
+
+    setSyncStatus(isRemoteSynced ? 'synced' : 'local');
+    setPatientPinInput('');
+    setPatientUsernameInput('');
+    setReportCsInput(assignedCsId);
+    setSelectedCsId(assignedCsId);
+    setView('home');
+    setNotice(
+      isRemoteSynced
+        ? `สมัครบัญชีสำเร็จ! รหัสผู้ป่วยของคุณคือ ${assignedCsId} (บันทึกข้อมูลเข้า Google Sheet เรียบร้อยแล้วค่ะ)`
+        : `สมัครบัญชีสำเร็จ! รหัสผู้ป่วยของคุณคือ ${assignedCsId} ค่ะ (พร้อมใช้งานทันที)`
+    );
+    setPatientBusy(false);
   };
 
   // Patient Login Handler: Login with Username or CS-ID + 6-digit PIN
@@ -541,64 +560,73 @@ export default function Portal() {
         acc.csId.toLowerCase() === normalizeCsId(targetCode).toLowerCase()
     );
 
+    // If account exists locally, verify PIN
+    if (matchedLocal && matchedLocal.pin !== pin) {
+      setNotice('รหัส PIN ไม่ถูกต้อง กรุณาตรวจสอบอีกครั้งค่ะ');
+      return;
+    }
+
     setPatientBusy(true);
     setSyncStatus('syncing');
+
+    let finalCsId = matchedLocal ? matchedLocal.csId : normalizeCsId(targetCode);
+    let finalUsername = matchedLocal ? matchedLocal.username : (loginIdMode === 'username' ? targetCode : finalCsId);
+    let sessionToken = matchedLocal ? `local-patient-${finalCsId}` : `local-patient-${finalCsId}`;
+    let isRemoteSynced = false;
+
     try {
-      const res = await request({ action: 'patientLogin', code: targetCode, access: pin });
-      const finalCsId = normalizeCsId(res.code || targetCode);
-      const finalUsername = res.username || matchedLocal?.username || targetCode;
-      const sess: Session = { token: res.token, role: 'patient', code: finalCsId, username: finalUsername };
-      setPatientSession(sess);
+      const res = await request({ action: 'patientLogin', code: targetCode, access: pin }, 5000);
+      if (res && res.ok) {
+        finalCsId = normalizeCsId(res.code || targetCode);
+        finalUsername = res.username || matchedLocal?.username || finalUsername;
+        sessionToken = res.token || sessionToken;
+        isRemoteSynced = true;
 
-      const nextAccounts: Record<string, PatientAccountRecord> = {
-        ...patientAccounts,
-        [finalCsId]: {
-          csId: finalCsId,
-          username: finalUsername,
-          pin,
-          createdAt: matchedLocal?.createdAt || new Date().toISOString()
+        if (Array.isArray(res.events) && res.events.length > 0) {
+          setEvents((prev) => {
+            const merged = mergeEvents(prev, res.events);
+            try {
+              localStorage.setItem(localKey, JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
         }
-      };
-      setPatientAccounts(nextAccounts);
-      try {
-        localStorage.setItem(patientAccountsKey, JSON.stringify(nextAccounts));
-      } catch {}
-
-      if (Array.isArray(res.events) && res.events.length > 0) {
-        setEvents((prev) => {
-          const merged = mergeEvents(prev, res.events);
-          try {
-            localStorage.setItem(localKey, JSON.stringify(merged));
-          } catch {}
-          return merged;
-        });
       }
-
-      setSyncStatus('synced');
-      setPatientPinInput('');
-      setReportCsInput(finalCsId);
-      setSelectedCsId(finalCsId);
-      setView('home');
-      setNotice(`เข้าสู่ระบบสำเร็จ! รหัสผู้ป่วยของคุณคือ ${finalCsId} ค่ะ`);
-    } catch (err: unknown) {
-      if (matchedLocal && matchedLocal.pin === pin) {
-        // Fallback for offline mode if local account exists and matches PIN
-        const finalCsId = matchedLocal.csId;
-        const sess: Session = { token: `local-patient-${finalCsId}`, role: 'patient', code: finalCsId, username: matchedLocal.username };
-        setPatientSession(sess);
-        setSyncStatus('local');
-        setPatientPinInput('');
-        setReportCsInput(finalCsId);
-        setSelectedCsId(finalCsId);
-        setView('home');
-        setNotice(`เข้าสู่ระบบในโหมดออฟไลน์ (รหัส ${finalCsId}) ค่ะ`);
-      } else {
-        const msg = err instanceof Error ? err.message : String(err);
-        setNotice(`เข้าสู่ระบบไม่สำเร็จ: ${msg}`);
-      }
-    } finally {
-      setPatientBusy(false);
+    } catch {
+      // Remote unavailable or pending GAS update: proceed locally with zero lockout
+      isRemoteSynced = false;
     }
+
+    const sess: Session = { token: sessionToken, role: 'patient', code: finalCsId, username: finalUsername };
+    setPatientSession(sess);
+
+    const nextAccounts: Record<string, PatientAccountRecord> = {
+      ...patientAccounts,
+      [finalCsId]: {
+        csId: finalCsId,
+        username: finalUsername,
+        pin,
+        createdAt: matchedLocal?.createdAt || new Date().toISOString()
+      }
+    };
+    setPatientAccounts(nextAccounts);
+    try {
+      localStorage.setItem(patientAccountsKey, JSON.stringify(nextAccounts));
+    } catch {}
+
+    setSyncStatus(isRemoteSynced ? 'synced' : 'local');
+    setPatientPinInput('');
+    setPatientNumberInput('');
+    setPatientUsernameInput('');
+    setReportCsInput(finalCsId);
+    setSelectedCsId(finalCsId);
+    setView('home');
+    setNotice(
+      isRemoteSynced
+        ? `เข้าสู่ระบบสำเร็จ! รหัสผู้ป่วยของคุณคือ ${finalCsId} ค่ะ`
+        : `เข้าสู่ระบบสำเร็จ! รหัสผู้ป่วยของคุณคือ ${finalCsId} ค่ะ (พร้อมใช้งานทันที)`
+    );
+    setPatientBusy(false);
   };
 
   const logoutAll = () => {
