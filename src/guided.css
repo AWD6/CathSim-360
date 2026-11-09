@@ -3082,6 +3082,7 @@
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
+  align-items: start;
 }
 
 @media (max-width: 860px) {
@@ -3097,31 +3098,41 @@
 
 .confidential-field label {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  margin-bottom: 6px;
+  align-items: center;
+  height: 26px;
+  line-height: 26px;
+  margin-bottom: 8px;
+  white-space: nowrap;
 }
 
 .confidential-field .field-title {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: #0f4039;
+  font-size: 14px;
+  font-weight: 800;
+  color: #064e3b;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.confidential-field .field-hint {
-  font-size: 11.5px;
+.confidential-field .field-subnote {
+  font-size: 12px;
   color: #64748b;
   font-weight: 500;
+  margin-top: 6px;
+  line-height: 1.3;
+  min-height: 18px;
 }
 
 .confidential-field input {
   width: 100%;
-  padding: 12px 14px;
+  height: 44px;
+  padding: 0 14px;
   font-size: 15px;
   font-weight: 600;
   color: #064e3b;
   background: #ffffff;
-  border: 1.5px solid #cce5dc;
+  border: 1.5px solid #a7f3d0;
   border-radius: 12px;
   box-sizing: border-box;
   transition: all 0.15s ease;
@@ -3136,37 +3147,54 @@
 .confidential-actions-row {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 14px;
+  margin-top: 10px;
   flex-wrap: wrap;
 }
 
 .confidential-submit-btn {
-  background: #0d9488 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 44px !important;
+  background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%) !important;
   color: #ffffff !important;
-  border-color: #0d9488 !important;
+  border: none !important;
   font-weight: 700 !important;
-  font-size: 15px !important;
-  padding: 13px 24px !important;
+  font-size: 14px !important;
+  padding: 0 22px !important;
   border-radius: 12px !important;
   cursor: pointer;
-  box-shadow: 0 2px 10px rgba(13, 148, 136, 0.25);
+  box-shadow: 0 2px 10px rgba(13, 148, 136, 0.28);
   transition: all 0.15s ease;
+  white-space: nowrap;
 }
 
 .confidential-submit-btn:hover:not(:disabled) {
-  background: #0f766e !important;
-  box-shadow: 0 4px 14px rgba(13, 148, 136, 0.35);
+  background: linear-gradient(135deg, #0f766e 0%, #115e59 100%) !important;
+  box-shadow: 0 4px 16px rgba(13, 148, 136, 0.38);
   transform: translateY(-1px);
 }
 
 .confidential-linked-pill {
-  font-size: 13px;
-  font-weight: 700;
-  color: #065f46;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
   background: #ecfdf5;
-  border: 1px solid #a7f3d0;
-  padding: 8px 14px;
-  border-radius: 10px;
+  color: #065f46;
+  border: 1.5px solid #a7f3d0;
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 0 16px;
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgba(5, 150, 105, 0.08);
+  box-sizing: border-box;
+}
+
+.confidential-linked-pill .pill-dot {
+  color: #10b981;
+  font-size: 14px;
 }
 
 .lookup-submit-btn {
@@ -3278,88 +3306,93 @@
 }
 
 /* ========================================================
-   Nurse Nong Four Speech Speed Control
+   Nurse Nong Four Speech Speed Control (Compact & Sleek)
    ======================================================== */
 .nurse-speed-selector {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
   flex-wrap: wrap;
-  margin: 14px 0;
+  margin: 8px 0;
 }
 
 .welcome-speed-selector {
-  margin: 18px 0 10px;
-  padding: 12px 18px;
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(8px);
-  border: 1px solid #ccfbf1;
-  border-radius: 16px;
+  margin: 10px 0 14px;
+  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(6px);
+  border: 1px solid #bbf0e5;
+  border-radius: 999px;
   width: fit-content;
+  box-shadow: 0 1px 6px rgba(13, 148, 136, 0.08);
 }
 
 .lesson-speed-selector {
-  margin: 12px 0 16px;
-  padding: 10px 14px;
+  margin: 6px 0 12px;
+  padding: 4px 10px;
   background: #f0fdf9;
   border: 1px solid #cce5dc;
-  border-radius: 12px;
+  border-radius: 999px;
+  width: fit-content;
 }
 
 .speed-title {
-  font-size: 13.5px;
+  font-size: 11.5px;
   font-weight: 700;
-  color: #0f4039;
+  color: #115e59;
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
+  white-space: nowrap;
 }
 
 .speed-pill-group {
   display: inline-flex;
-  background: #e6f4f1;
+  background: #e2f4ef;
   border-radius: 999px;
-  padding: 3px;
-  gap: 3px;
-  border: 1px solid #b2e6db;
+  padding: 2px;
+  gap: 2px;
+  border: 1px solid #a7f3d0;
 }
 
 .speed-pill-group.mini {
-  padding: 2px;
-  gap: 2px;
+  padding: 1.5px;
+  gap: 1.5px;
   background: rgba(255, 255, 255, 0.95);
   border: 1px solid #99f6e4;
-  box-shadow: 0 2px 6px rgba(13, 148, 136, 0.15);
-  margin-top: 4px;
+  box-shadow: 0 1px 4px rgba(13, 148, 136, 0.12);
+  margin-top: 3px;
 }
 
 .speed-pill {
   border: none;
   background: transparent;
-  padding: 5px 12px;
-  font-size: 12.5px;
-  font-weight: 700;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 600;
   color: #0d9488;
   border-radius: 999px;
   cursor: pointer;
   transition: all 0.15s ease;
-  line-height: 1.2;
+  line-height: 1.25;
+  white-space: nowrap;
 }
 
 .speed-pill-group.mini .speed-pill {
-  padding: 3px 8px;
-  font-size: 11px;
+  padding: 2px 7px;
+  font-size: 10.5px;
 }
 
 .speed-pill:hover {
-  background: rgba(13, 148, 136, 0.1);
-  color: #064e3b;
+  background: rgba(13, 148, 136, 0.12);
+  color: #042f2e;
 }
 
 .speed-pill.active {
   background: #0d9488 !important;
   color: #ffffff !important;
-  box-shadow: 0 2px 8px rgba(13, 148, 136, 0.28);
+  font-weight: 700;
+  box-shadow: 0 1px 5px rgba(13, 148, 136, 0.35);
 }
 
 .demo-nurse-details {

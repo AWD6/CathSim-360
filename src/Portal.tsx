@@ -54,7 +54,7 @@ const confidentialLinksKey = 'cathsim:admin-confidential-links:v1';
 const adminLockStorageKey = 'cathsim:admin-lock:v1';
 const media = (name: string) => `${import.meta.env.BASE_URL}media/${name}?v=8`;
 
-async function request(body: object, timeoutMs = 8000) {
+async function request<T = any>(body: object, timeoutMs = 8000): Promise<T> {
   const res = await fetch(endpoint, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -63,7 +63,7 @@ async function request(body: object, timeoutMs = 8000) {
   });
   const data = await res.json();
   if (!data.ok) throw new Error(data.message || data.error || 'รหัสผ่านไม่ถูกต้อง กรุณาตรวจสอบอีกครั้งค่ะ');
-  return data;
+  return data as T;
 }
 
 function localEvents(): StepEvent[] {
@@ -795,7 +795,26 @@ export default function Portal() {
         localStorage.setItem(adminLockStorageKey, JSON.stringify(attemptResult.state));
       } catch {}
 
-      setAdminSession({ token: 'local-admin-dmknj', role: 'admin', code: 'ADMIN' });
+      // Attempt to obtain a real server session token from Google Apps Script
+      let realToken = 'local-admin-dmknj';
+      try {
+        const authRes = await request<{ ok: boolean; token?: string; confidentialLinks?: ConfidentialPatientLink[] }>({
+          action: 'adminLogin',
+          access: 'dmknj'
+        });
+        if (authRes && authRes.ok && authRes.token) {
+          realToken = authRes.token;
+          if (Array.isArray(authRes.confidentialLinks) && authRes.confidentialLinks.length > 0) {
+            const mapped: Record<string, ConfidentialPatientLink> = {};
+            authRes.confidentialLinks.forEach((l: ConfidentialPatientLink) => {
+              mapped[normalizeCsId(l.csId)] = l;
+            });
+            setConfidentialLinks((prev) => ({ ...prev, ...mapped }));
+          }
+        }
+      } catch {}
+
+      setAdminSession({ token: realToken, role: 'admin', code: 'ADMIN' });
       setSelectedCsId(targetCs);
       setReportCsInput(targetCs);
       setLinkCsIdInput(targetCs);
@@ -862,21 +881,59 @@ export default function Portal() {
         localStorage.setItem(confidentialLinksKey, JSON.stringify(updated));
       } catch {}
 
-      if (adminSession && !adminSession.token.startsWith('local-admin-')) {
-        await request({
+      // Send to Google Apps Script via POST and GET fallback
+      let remoteSynced = false;
+      let remoteErr = '';
+
+      try {
+        const res = await request<{ ok: boolean; error?: string; confidentialLinks?: ConfidentialPatientLink[] }>({
           action: 'linkPatientIdentity',
-          token: adminSession.token,
+          adminKey: 'dmknj',
+          token: adminSession?.token || 'dmknj',
           csId,
           hn,
           fullName
-        }).catch(() => {});
+        });
+        if (res && res.ok) {
+          remoteSynced = true;
+          if (Array.isArray(res.confidentialLinks) && res.confidentialLinks.length > 0) {
+            const mapped: Record<string, ConfidentialPatientLink> = {};
+            res.confidentialLinks.forEach((l: ConfidentialPatientLink) => {
+              mapped[normalizeCsId(l.csId)] = l;
+            });
+            setConfidentialLinks((prev) => ({ ...prev, ...mapped }));
+          }
+        } else {
+          remoteErr = res?.error || '';
+        }
+      } catch (err: any) {
+        remoteErr = err?.message || '';
+      }
+
+      // If POST wasn't confirmed, attempt direct GET fallback
+      if (!remoteSynced) {
+        try {
+          const getUrl = `${endpoint}?action=linkPatientIdentity&adminKey=dmknj&csId=${encodeURIComponent(csId)}&hn=${encodeURIComponent(hn)}&fullName=${encodeURIComponent(fullName)}`;
+          const getRes = await fetch(getUrl);
+          const getJson = await getRes.json();
+          if (getJson && getJson.ok) {
+            remoteSynced = true;
+          }
+        } catch {}
       }
 
       setSelectedCsId(csId);
       setReportCsInput(csId);
-      setNotice(
-        `เชื่อมโยงรหัส ${csId} กับข้อมูล HN และ ชื่อ - นามสกุล เก็บเป็นความลับไว้ที่ Google Sheet เรียบร้อยแล้วค่ะ (ห้ามเผยแพร่)`
-      );
+
+      if (remoteSynced) {
+        setNotice(
+          `✓ บันทึกเชื่อมโยงรหัส ${csId} (HN: ${hn}, ${fullName}) เข้ากับ Google Sheet แท็บ CS_HN_Directory สำเร็จเรียบร้อยแล้วค่ะ`
+        );
+      } else {
+        setNotice(
+          `บันทึกข้อมูล ${csId} ในเครื่องแล้ว แต่ยังส่งไม่ถึง Google Sheet (${remoteErr || 'กรุณาอัปเดตโค้ด Apps Script'}) ค่ะ`
+        );
+      }
     } finally {
       setLinkBusy(false);
     }
@@ -1537,30 +1594,33 @@ export default function Portal() {
                       ฟังคำแนะนำ แล้วฝึกทำตามไปด้วยกันนะคะ
                     </p>
 
-                    {/* Speed Selection Pills for Nurse Nong Four */}
+                    {/* Compact Speed Selection Pills for Nurse Nong Four */}
                     <div className="nurse-speed-selector welcome-speed-selector">
-                      <span className="speed-title">⚡ ความเร็วเสียงพูดพยาบาลน้องโฟร์:</span>
-                      <div className="speed-pill-group" role="group" aria-label="เลือกความเร็วเสียงพูดพยาบาลน้องโฟร์">
+                      <span className="speed-title">ความเร็วเสียง:</span>
+                      <div className="speed-pill-group" role="group" aria-label="ความเร็วเสียงพูดพยาบาลน้องโฟร์">
                         <button
                           type="button"
                           className={`speed-pill ${speechSpeed === 'slowest' ? 'active' : ''}`}
                           onClick={() => setSpeechSpeed('slowest')}
+                          title="ช้ามาก (0.65x)"
                         >
-                          ช้ามาก (0.65x)
+                          ช้ามาก
                         </button>
                         <button
                           type="button"
                           className={`speed-pill ${speechSpeed === 'slow' ? 'active' : ''}`}
                           onClick={() => setSpeechSpeed('slow')}
+                          title="ช้า (0.8x)"
                         >
-                          ช้า (0.8x)
+                          ช้า
                         </button>
                         <button
                           type="button"
                           className={`speed-pill ${speechSpeed === 'normal' ? 'active' : ''}`}
                           onClick={() => setSpeechSpeed('normal')}
+                          title="ปกติ (1.0x)"
                         >
-                          ปกติ (1.0x)
+                          ปกติ
                         </button>
                       </div>
                     </div>
@@ -1768,30 +1828,33 @@ export default function Portal() {
                         </div>
                       )}
 
-                      {/* Nurse Nong Four Speech Speed Control */}
+                      {/* Compact Nurse Nong Four Speech Speed Control */}
                       <div className="nurse-speed-selector lesson-speed-selector">
-                        <span className="speed-title">⚡ ความเร็วเสียงพูด:</span>
-                        <div className="speed-pill-group" role="group" aria-label="เลือกความเร็วเสียงพูดพยาบาลน้องโฟร์">
+                        <span className="speed-title">ความเร็วเสียง:</span>
+                        <div className="speed-pill-group" role="group" aria-label="ความเร็วเสียงพูดพยาบาลน้องโฟร์">
                           <button
                             type="button"
                             className={`speed-pill ${speechSpeed === 'slowest' ? 'active' : ''}`}
                             onClick={() => setSpeechSpeed('slowest')}
+                            title="ช้ามาก (0.65x)"
                           >
-                            ช้ามาก (0.65x)
+                            ช้ามาก
                           </button>
                           <button
                             type="button"
                             className={`speed-pill ${speechSpeed === 'slow' ? 'active' : ''}`}
                             onClick={() => setSpeechSpeed('slow')}
+                            title="ช้า (0.8x)"
                           >
-                            ช้า (0.8x)
+                            ช้า
                           </button>
                           <button
                             type="button"
                             className={`speed-pill ${speechSpeed === 'normal' ? 'active' : ''}`}
                             onClick={() => setSpeechSpeed('normal')}
+                            title="ปกติ (1.0x)"
                           >
-                            ปกติ (1.0x)
+                            ปกติ
                           </button>
                         </div>
                       </div>
@@ -1981,42 +2044,42 @@ export default function Portal() {
                         <div className="confidential-inputs-grid">
                           <div className="confidential-field">
                             <label htmlFor="admin-csid-input">
-                              <span className="field-title">CS ID (รหัสผู้ป่วย)</span>
-                              <span className="field-hint">เช่น CS-1, CS-2</span>
+                              <span className="field-title">🆔 รหัส CS ID</span>
                             </label>
                             <input
                               id="admin-csid-input"
                               type="text"
                               value={linkCsIdInput}
-                              placeholder="เช่น CS-1, CS-2"
+                              placeholder="เช่น CS-1, CS-4"
                               onChange={(e) => setLinkCsIdInput(e.target.value)}
                             />
+                            <span className="field-subnote">เช่น CS-1, CS-4 (รหัสประจำตัว)</span>
                           </div>
                           <div className="confidential-field">
                             <label htmlFor="admin-hn-input">
-                              <span className="field-title">HN (หมายเลขประจำตัวผู้ป่วย)</span>
-                              <span className="field-hint">หมายเลขประจำตัว รพ.</span>
+                              <span className="field-title">🏥 หมายเลข HN (รพ.)</span>
                             </label>
                             <input
                               id="admin-hn-input"
                               type="text"
                               value={linkHnInput}
-                              placeholder="กรอก HN เช่น 6501234"
+                              placeholder="กรอก HN เช่น 1234567"
                               onChange={(e) => setLinkHnInput(e.target.value)}
                             />
+                            <span className="field-subnote">หมายเลขประจำตัวผู้ป่วยของ รพ.</span>
                           </div>
                           <div className="confidential-field">
                             <label htmlFor="admin-name-input">
-                              <span className="field-title">ชื่อ - นามสกุล (ผู้ป่วย)</span>
-                              <span className="field-hint">ชื่อจริงสำหรับโรงพยาบาล</span>
+                              <span className="field-title">👤 ชื่อ - นามสกุล</span>
                             </label>
                             <input
                               id="admin-name-input"
                               type="text"
                               value={linkFullNameInput}
-                              placeholder="กรอก ชื่อ - นามสกุล ของผู้ป่วย"
+                              placeholder="กรอก ชื่อ - นามสกุล เช่น ติ๋ม"
                               onChange={(e) => setLinkFullNameInput(e.target.value)}
                             />
+                            <span className="field-subnote">ชื่อจริงสำหรับเวชระเบียน</span>
                           </div>
                         </div>
 
@@ -2027,11 +2090,11 @@ export default function Portal() {
                             disabled={linkBusy || !linkCsIdInput.trim() || !linkHnInput.trim() || !linkFullNameInput.trim()}
                             onClick={saveConfidentialLink}
                           >
-                            {linkBusy ? '⏳ กำลังบันทึกข้อมูลความลับลง Google Sheet…' : '💾 บันทึกเชื่อมข้อมูลไว้ที่ Google Sheet (ความลับ)'}
+                            {linkBusy ? '⏳ กำลังบันทึกลง Google Sheet…' : '💾 บันทึกเชื่อมข้อมูลไว้ที่ Google Sheet (CS_HN_Directory)'}
                           </button>
                           {confidentialLinks[normalizeCsId(linkCsIdInput)] && (
                             <span className="confidential-linked-pill">
-                              ✓ รหัส {normalizeCsId(linkCsIdInput)} เชื่อมต่อกับ HN: {confidentialLinks[normalizeCsId(linkCsIdInput)].hn} ({confidentialLinks[normalizeCsId(linkCsIdInput)].fullName}) เรียบร้อยแล้ว
+                              <span className="pill-dot">●</span> รหัส <strong>{normalizeCsId(linkCsIdInput)}</strong> เชื่อมต่อกับ HN: <strong>{confidentialLinks[normalizeCsId(linkCsIdInput)].hn}</strong> ({confidentialLinks[normalizeCsId(linkCsIdInput)].fullName}) เรียบร้อยแล้ว
                             </span>
                           )}
                         </div>

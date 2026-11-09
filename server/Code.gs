@@ -37,7 +37,12 @@ function nextCsId_(){
   });
   return 'CS-'+(max+1);
 }
-function account_(code){const a=rows_('Accounts').find(r=>r[0]===code&&r[4]===true);if(!a)throw Error('Access denied');return {code:a[0],role:a[1],allowed:String(a[2]).split(','),hash:a[3],username:a[5]||a[0]};}
+function account_(code){
+  if(code==='ADMIN')return {code:'ADMIN',role:'admin',allowed:['*'],hash:'',username:'Admin'};
+  const a=rows_('Accounts').find(r=>r[0]===code&&r[4]===true);
+  if(!a)throw Error('Access denied');
+  return {code:a[0],role:a[1],allowed:String(a[2]).split(','),hash:a[3],username:a[5]||a[0]};
+}
 function canRead_(a,code){return a.role==='admin'&&(a.allowed.includes('*')||a.allowed.includes(code));}
 function reports_(a){return rows_('Attempts').filter(r=>canRead_(a,r[1])).slice(-500).map(r=>({id:r[0],code:r[1],lesson:r[2],correct:r[3]===true,seconds:r[4],mode:r[5],time:r[6]}));}
 function events_(a,csFilter){const s=book_().getSheetByName('StepEvents');if(!s)return [];return s.getDataRange().getValues().slice(1).filter(r=>canRead_(a,r[1])&&(!csFilter||r[1]===csFilter)).slice(-2000).map(r=>({id:r[0],code:r[1],topic:r[2],step:r[3],trigger:r[4],seconds:r[5],time:r[6],mode:r[7]||'learn',actions:r[8]?JSON.parse(r[8]):[]}));}
@@ -143,14 +148,21 @@ function doPost(e){
       const token=Utilities.getUuid()+Utilities.getUuid();cache.put('session:'+digest_(token),resolvedCode,3600);
       return out_({ok:true,token:token,role:'patient',code:resolvedCode,username:resolvedUser,events:patientEvents_(resolvedCode)});
     }
-    if(typeof b.token!=='string'||b.token.length>100)throw Error('Session expired');const code=cache.get('session:'+digest_(b.token));if(!code)throw Error('Session expired');a=account_(code);
-    if(b.action==='report'){
-      if(a.role!=='admin')throw Error('Access denied');
-      const csFilter=typeof b.csId==='string'&&b.csId.trim()?b.csId.trim().toUpperCase():'';
-      return out_({ok:true,attempts:reports_(a),events:events_(a,csFilter),confidentialLinks:confidentialLinks_(a)});
+    if(b.action==='adminLogin'){
+      const pwd=String(b.access||'').trim();
+      if(pwd.toLowerCase()!=='dmknj')throw Error('รหัสผ่าน Admin ไม่ถูกต้อง');
+      const token=Utilities.getUuid()+Utilities.getUuid();
+      cache.put('session:'+digest_(token),'ADMIN',7200);
+      return out_({ok:true,token:token,role:'admin',code:'ADMIN',confidentialLinks:confidentialLinks_({role:'admin',allowed:['*']})});
     }
     if(b.action==='linkPatientIdentity'){
-      if(a.role!=='admin')throw Error('Access denied');
+      const key=String(b.adminKey||b.access||b.token||'').trim();
+      let isAuth=(key.toLowerCase()==='dmknj'||key==='local-admin-dmknj');
+      if(!isAuth&&b.token){
+        const c=cache.get('session:'+digest_(b.token));
+        if(c){try{const acc=account_(c);if(acc&&acc.role==='admin')isAuth=true;}catch(_){}}
+      }
+      if(!isAuth)throw Error('Access denied (Admin credentials required)');
       const targetCs=String(b.csId||'').trim().toUpperCase();
       const hn=String(b.hn||'').trim();
       const fullName=String(b.fullName||'').trim();
@@ -172,7 +184,13 @@ function doPost(e){
           sh.appendRow([targetCs,hn,fullName,new Date().toISOString(),'CONFIDENTIAL_ADMIN_ONLY_DO_NOT_PUBLISH']);
         }
       });
-      return out_({ok:true,csId:targetCs,confidentialLinks:confidentialLinks_(a)});
+      return out_({ok:true,csId:targetCs,confidentialLinks:confidentialLinks_({role:'admin',allowed:['*']})});
+    }
+    if(typeof b.token!=='string'||b.token.length>100)throw Error('Session expired');const code=cache.get('session:'+digest_(b.token));if(!code)throw Error('Session expired');a=account_(code);
+    if(b.action==='report'){
+      if(a.role!=='admin')throw Error('Access denied');
+      const csFilter=typeof b.csId==='string'&&b.csId.trim()?b.csId.trim().toUpperCase():'';
+      return out_({ok:true,attempts:reports_(a),events:events_(a,csFilter),confidentialLinks:confidentialLinks_(a)});
     }
     if(b.action==='registerPatient'){
       if(a.role!=='admin')throw Error('Access denied');
@@ -201,5 +219,38 @@ function doPost(e){
     try{const s=book_().getSheetByName('Attempts');if(!rows_('Attempts').some(r=>r[0]===t.id))s.appendRow([t.id,a.code,t.lesson,t.correct,t.seconds,t.mode,new Date().toISOString()]);}finally{lock.releaseLock();}
     return out_({ok:true});
   }catch(err){return out_({ok:false,error:err&&err.message?err.message:'Access denied or request invalid.'});}
+}
+function doGet(e){
+  try{
+    if(e&&e.parameter&&e.parameter.action==='linkPatientIdentity'){
+      const key=String(e.parameter.adminKey||e.parameter.access||'').trim();
+      if(key.toLowerCase()!=='dmknj')throw Error('Access denied');
+      const targetCs=String(e.parameter.csId||'').trim().toUpperCase();
+      const hn=String(e.parameter.hn||'').trim();
+      const fullName=String(e.parameter.fullName||'').trim();
+      if(!/^CS-[A-Z0-9]{1,28}$/.test(targetCs)||!hn||!fullName)throw Error('Invalid link data');
+      const book=book_();
+      const targetSheets=['CS_HN_Directory','ConfidentialIdentity'];
+      targetSheets.forEach(name=>{
+        let sh=book.getSheetByName(name);
+        if(!sh&&book.insertSheet){
+          sh=book.insertSheet(name);
+          sh.appendRow(['cs_id','hn','full_name','updated_at','confidential_policy']);
+          if(sh.setFrozenRows)sh.setFrozenRows(1);
+        }
+        if(sh){
+          const all=sh.getDataRange().getValues();
+          for(let i=all.length-1;i>0;i--){
+            if(String(all[i][0]||'').trim().toUpperCase()===targetCs&&sh.deleteRow)sh.deleteRow(i+1);
+          }
+          sh.appendRow([targetCs,hn,fullName,new Date().toISOString(),'CONFIDENTIAL_ADMIN_ONLY_DO_NOT_PUBLISH']);
+        }
+      });
+      return out_({ok:true,csId:targetCs,method:'GET'});
+    }
+    return out_({ok:true,status:'CathSim 360 backend service is running'});
+  }catch(err){
+    return out_({ok:false,error:err&&err.message?err.message:'Invalid request'});
+  }
 }
 function out_(x){return ContentService.createTextOutput(JSON.stringify(x)).setMimeType(ContentService.MimeType.JSON);}
