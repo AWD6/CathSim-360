@@ -12,6 +12,9 @@ type Props = {
   paused: boolean;
   speaking?: boolean;
   mode?: LearningMode;
+  sex?: 'female' | 'male';
+  onSexChange?: (sex: 'female' | 'male') => void;
+  onOpenHandVideo?: () => void;
   onAction?: (action: string) => void;
 };
 
@@ -152,12 +155,16 @@ function Room() {
 function Patient({
   tape,
   chooseTape,
-  onToggleSlack
+  onToggleSlack,
+  activeSex = 'female',
+  isSecureTopic = false
 }: {
   tape: number;
   slackMode: boolean;
   chooseTape: (thigh: number) => void;
   onToggleSlack: () => void;
+  activeSex?: 'female' | 'male';
+  isSecureTopic?: boolean;
 }) {
   return (
     <group position={[0, 0, 0]}>
@@ -181,6 +188,14 @@ function Patient({
         <meshStandardMaterial color="#0284c7" emissive="#0284c7" emissiveIntensity={0.3} />
       </mesh>
 
+      {/* Male Suprapubic Tape Anchor (บริเวณหัวหน่าวหรือท้องน้อย) */}
+      {isSecureTopic && activeSex === 'male' && tape > 0 && (
+        <group position={[-0.55, 1.74, 0.36]}>
+          <Block p={[0, 0, 0]} s={[0.32, 0.04, 0.22]} c={tapeColor} onClick={onToggleSlack} />
+          <Block p={[0, 0.025, 0]} s={[0.30, 0.015, 0.04]} c="#38bdf8" />
+        </group>
+      )}
+
       {[-1.0, -0.3].map((tx, idx) => {
         const thighNum = idx + 1;
         const isTaped = tape === thighNum;
@@ -195,7 +210,8 @@ function Patient({
             <Block p={[tx, 0.7, 0.7]} s={[0.26, 1.0, 0.26]} c={skinTone} />
             <Block p={[tx, 0.18, 0.84]} s={[0.28, 0.16, 0.46]} c="#cbd5e1" />
 
-            {isTaped && (
+            {/* Female or General Thigh Tape (แปะหน้าขา) */}
+            {isTaped && !(isSecureTopic && activeSex === 'male') && (
               <group position={[tx, 1.535, 0.44]}>
                 <Block p={[0, 0, 0]} s={[0.3, 0.035, 0.22]} c={tapeColor} onClick={onToggleSlack} />
                 <Block p={[0, 0.02, 0]} s={[0.28, 0.01, 0.04]} c="#38bdf8" />
@@ -860,7 +876,17 @@ const CameraController = forwardRef<
   );
 });
 
-export default function GuidedScene({ topic, visual, paused, speaking = false, mode = 'learn', onAction }: Props) {
+export default function GuidedScene({
+  topic,
+  visual,
+  paused,
+  speaking = false,
+  mode = 'learn',
+  sex: sexProp,
+  onSexChange,
+  onOpenHandVideo,
+  onAction
+}: Props) {
   const [height, setHeight] = useState(0.9);
   const [valve, setValve] = useState(false);
   const [container, setContainer] = useState(false);
@@ -870,14 +896,18 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
   const [tape, setTape] = useState(0);
   const [slackTight, setSlackTight] = useState(false);
   const [straight, setStraight] = useState(true);
+  const [tubeIssue, setTubeIssue] = useState<'normal' | 'kink' | 'dependentLoop'>('normal');
   const [phase, setPhase] = useState(0);
-  const [sex, setSex] = useState<'female' | 'male'>('female');
-  const [connected, setConnected] = useState(false);
-  const [junctionFolded, setJunctionFolded] = useState(false);
-  const [junctionWiped, setJunctionWiped] = useState(false);
+  const [internalSex, setInternalSex] = useState<'female' | 'male'>('female');
   const [troubleDemo, setTroubleDemo] = useState<'kink' | 'belly' | 'leak' | 'flank' | 'blood' | 'fever'>('kink');
   const [feedback, setFeedback] = useState('');
   const [drag, setDrag] = useState(false);
+
+  const sex = sexProp ?? internalSex;
+  const handleSexChange = (newSex: 'female' | 'male') => {
+    setInternalSex(newSex);
+    onSexChange?.(newSex);
+  };
 
   const cameraCtrl = useRef<{ reset: () => void }>(null);
 
@@ -909,10 +939,23 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
     setStowed(auto && topic === 'drain' && visual >= 3);
     setTape(auto && topic === 'secure' && visual > 0 ? 1 : 0);
     setSlackTight(false);
-    setStraight(auto && topic === 'tube' && visual > 0);
-    setConnected(auto && topic === 'change' && (visual <= 1 || visual >= 3));
-    setJunctionFolded(auto && topic === 'change' && visual === 2);
-    setJunctionWiped(auto && topic === 'change' && visual >= 2);
+
+    if (topic === 'tube') {
+      if (visual === 0) {
+        setStraight(false);
+        setTubeIssue('kink');
+      } else if (visual === 2) {
+        setStraight(true);
+        setTubeIssue('dependentLoop');
+      } else {
+        setStraight(true);
+        setTubeIssue('normal');
+      }
+    } else {
+      setStraight(true);
+      setTubeIssue('normal');
+    }
+
     if (topic === 'trouble') {
       if (visual === 0) {
         setTroubleDemo('kink');
@@ -925,10 +968,9 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
         setStraight(true);
       }
     }
-    // For hygiene topic, sync phase with visual step so soap bubbles (visual 1, 2) and water rinse (visual 3) play automatically!
+    // For hygiene topic, sync phase with visual step (soap foam -> water rinse -> pat dry)
     if (topic === 'hygiene') {
-      setSex(visual === 2 ? 'male' : 'female');
-      setPhase(visual === 3 ? 1 : visual >= 4 ? 2 : 0);
+      setPhase(visual === 1 ? 0 : visual === 2 ? 1 : visual >= 3 ? 2 : 0);
     } else {
       setPhase(0);
     }
@@ -987,7 +1029,11 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
   const chooseTape = (thigh: number) => {
     if (topic !== 'secure') return;
     setTape(thigh);
-    record(thigh === 1 ? 'แปะเทปที่หน้าขาขวา เหลือระยะหย่อนพอดี' : 'แปะเทปที่หน้าขาซ้าย เหลือระยะหย่อนพอดี');
+    if (sex === 'male') {
+      record('แปะเทปบริเวณหัวหน่าวหรือท้องน้อย เหลือระยะหย่อนพอดี');
+    } else {
+      record(thigh === 1 ? 'แปะเทปที่หน้าขาขวา เหลือระยะหย่อนพอดี' : 'แปะเทปที่หน้าขาซ้าย เหลือระยะหย่อนพอดี');
+    }
   };
 
   const handPhases = [
@@ -1006,7 +1052,7 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
   const isTouchingFloor = height < 0.4;
   const isOptimalPosition = !isAboveWaist && !isTouchingFloor;
 
-  const showBodyTopics = ['position', 'tube', 'secure', 'trouble', 'change'].includes(topic);
+  const showBodyTopics = ['position', 'tube', 'secure', 'trouble'].includes(topic);
 
   const insertionPoint: V = [-0.65, 1.48, 0.25];
   const bagInlet: V = [0.82, height + 0.38, 0.58];
@@ -1024,26 +1070,51 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
       [0.35, 1.10, 0.58],
       bagInlet
     ];
+  } else if (topic === 'tube' && tubeIssue === 'dependentLoop') {
+    // สายคล้อยห้อยท้องช้าง (Dependent loop): ตกท้องช้างต่ำกว่าระดับปากถุง เกิด Fluid Trap เสี่ยงแบคทีเรียไหลย้อนกลับ
+    catheterPoints = [
+      insertionPoint,
+      [-0.48, 1.58, 0.36],
+      [-0.30, 1.62, 0.44], // พาดบนหน้าขา
+      [-0.05, 1.20, 0.48], // เริ่มหย่อนลง
+      [0.22, 0.45, 0.52],  // ห้อยท้องช้างต่ำกว่าระดับปากถุง
+      [0.48, 0.42, 0.56],  // ท้องช้างแอ่งน้ำขังค้าง (Fluid Trap)
+      [0.68, 0.82, 0.58],  // ไต่ย้อนกลับขึ้นมายังปากถุง
+      bagInlet
+    ];
   } else if (topic === 'secure' && tape > 0) {
-    const thighX = tape === 1 ? -1.0 : -0.3;
-    if (slackTight) {
+    if (sex === 'male') {
+      // เพศชาย: ยึดสายบริเวณหัวหน่าวหรือท้องน้อย (Suprapubic area)
       catheterPoints = [
         insertionPoint,
-        [-0.48, 1.58, 0.36],
-        [thighX, 1.60, 0.44], // พาดบนหน้าขาแน่นพอดี
-        [0.2, 1.38, 0.55],
+        [-0.58, 1.66, 0.32],
+        [-0.55, 1.74, 0.36], // แปะเทปที่หัวหน่าว/ท้องน้อย
+        [-0.20, 1.64, 0.46],
+        [0.20, 1.45, 0.54],
         bagInlet
       ];
     } else {
-      catheterPoints = [
-        insertionPoint,
-        [-0.48, 1.58, 0.36],
-        [thighX - 0.05, 1.61, 0.42],
-        [thighX, 1.62, 0.44], // พาดบนหน้าขาอย่างนุ่มนวล หย่อนพอดี ไม่ตึงรั้ง
-        [0.10, 1.48, 0.52],
-        [0.38, 1.25, 0.60],
-        bagInlet
-      ];
+      // เพศหญิง: ยึดสายที่หน้าขา (Anterior thigh)
+      const thighX = tape === 1 ? -1.0 : -0.3;
+      if (slackTight) {
+        catheterPoints = [
+          insertionPoint,
+          [-0.48, 1.58, 0.36],
+          [thighX, 1.60, 0.44], // พาดบนหน้าขาแน่นพอดี
+          [0.2, 1.38, 0.55],
+          bagInlet
+        ];
+      } else {
+        catheterPoints = [
+          insertionPoint,
+          [-0.48, 1.58, 0.36],
+          [thighX - 0.05, 1.61, 0.42],
+          [thighX, 1.62, 0.44], // พาดบนหน้าขาอย่างนุ่มนวล หย่อนพอดี ไม่ตึงรั้ง
+          [0.10, 1.48, 0.52],
+          [0.38, 1.25, 0.60],
+          bagInlet
+        ];
+      }
     }
   } else {
     // สายสวนไม่ให้แสดงทะลุขาผู้ป่วย: ให้สายพาดอยู่บนขาผู้ป่วยเสมอ (y = 1.62 ลอยเด่นเหนือผิวต้นขา 1.53 ไม่ทะลุเนื้อขาเด็ดขาด)
@@ -1081,6 +1152,8 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
                     setSlackTight((s) => !s);
                     record(slackTight ? 'จัดสายหย่อนพอดี ไม่ตึงรั้ง' : 'จำลองสายตึงรั้งเกินไป');
                   }}
+                  activeSex={sex}
+                  isSecureTopic={topic === 'secure'}
                 />
 
                 {topic === 'position' && (
@@ -1101,31 +1174,42 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
                   </>
                 )}
 
-                {topic !== 'change' && (
-                  <>
-                    <Line
-                      points={catheterPoints}
-                      color={
-                        topic === 'trouble' && (troubleDemo === 'blood' || visual === 2)
-                          ? '#dc2626'
-                          : (slackTight && topic === 'secure') ||
-                            (!straight && topic === 'tube') ||
-                            (topic === 'trouble' && (!straight || troubleDemo === 'kink'))
-                          ? '#ef4444'
-                          : '#d4af37'
-                      }
-                      lineWidth={6}
-                      onClick={() => {
-                        setStraight(true);
-                        if (topic === 'trouble' && troubleDemo === 'kink') {
-                          record('คลายจุดที่สายพับงอออก');
-                        } else {
-                          record('จัดสายให้คลายพับงอ');
-                        }
-                      }}
-                    />
+                <Line
+                  points={catheterPoints}
+                  color={
+                    topic === 'trouble' && (troubleDemo === 'blood' || visual === 2)
+                      ? '#dc2626'
+                      : topic === 'tube' && tubeIssue === 'dependentLoop'
+                      ? '#ea580c'
+                      : (slackTight && topic === 'secure') ||
+                        (!straight && topic === 'tube') ||
+                        (topic === 'trouble' && (!straight || troubleDemo === 'kink'))
+                      ? '#ef4444'
+                      : '#d4af37'
+                  }
+                  lineWidth={6}
+                  onClick={() => {
+                    setStraight(true);
+                    setTubeIssue('normal');
+                    if (topic === 'trouble' && troubleDemo === 'kink') {
+                      record('คลายจุดที่สายพับงอออก');
+                    } else if (topic === 'tube') {
+                      record('จัดสายให้พาดบนหน้าขา ลาดเทตรง');
+                    } else {
+                      record('จัดสายให้คลายพับงอ');
+                    }
+                  }}
+                />
 
-                    {/* Visual Symptom Demonstrations for topic === 'trouble' (เมื่อมีปัญหา) */}
+                {/* Dependent Loop Fluid Trap Pool (แอ่งน้ำปัสสาวะขังคั่งค้างในท้องช้าง) */}
+                {topic === 'tube' && tubeIssue === 'dependentLoop' && (
+                  <group position={[0.35, 0.44, 0.54]}>
+                    <Ball p={[0, 0, 0]} s={[0.14, 0.09, 0.14]} c="#eab308" />
+                    <Ball p={[0.13, 0.02, 0]} s={[0.09, 0.07, 0.09]} c="#ca8a04" />
+                  </group>
+                )}
+
+                {/* Visual Symptom Demonstrations for topic === 'trouble' (เมื่อมีปัญหา) */}
                     {topic === 'trouble' && (
                       <group>
                         {/* 1. สายพับงอ (Kinked tube highlight marker) */}
@@ -1244,8 +1328,6 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
                     </group>
                   </>
                 )}
-              </>
-            )}
 
             {topic === 'hands' && (
               <Washing
@@ -1319,128 +1401,6 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
               <Block p={[0.7, 0.2, 1]} s={[0.4, 0.04, 0.22]} c="#ffffff" onClick={() => chooseTape(1)} />
             )}
 
-            {topic === 'change' && (
-              <>
-                {/* Foley Catheter Tube coming from Patient to the Catheter-Bag Junction (ข้อต่อที่ต่อจากสายสวนปัสสาวะ) พาดบนหน้าขาผู้ป่วย */}
-                <Line
-                  points={
-                    junctionFolded
-                      ? [
-                          insertionPoint,
-                          [-0.48, 1.58, 0.36],
-                          [-0.30, 1.62, 0.44], // พาดบนหน้าขา (y = 1.62 ลอยเด่นเหนือต้นขา)
-                          [-0.20, 1.60, 0.48], // พับสายชั่วคราวเหนือข้อต่อบนหน้าขา
-                          [-0.14, 1.54, 0.52],
-                          [-0.08, 1.48, 0.55]
-                        ]
-                      : [
-                          insertionPoint,
-                          [-0.48, 1.58, 0.36],
-                          [-0.30, 1.62, 0.44], // พาดบนหน้าขาผู้ป่วยอย่างชัดเจน (y = 1.62 ลอยเด่นเหนือต้นขา)
-                          [-0.14, 1.54, 0.50],
-                          [-0.08, 1.48, 0.55]
-                        ]
-                  }
-                  color="#d4af37"
-                  lineWidth={7}
-                  onClick={() => {
-                    setJunctionFolded((f) => !f);
-                    record(junctionFolded ? 'คลายสายสวนปัสสาวะที่พับไว้' : 'พับสายสวนปัสสาวะเหนือข้อต่อไว้ชั่วคราว');
-                  }}
-                />
-
-                {/* Catheter Funnel / Junction Port on the Foley Catheter (ข้อต่อสายสวนปัสสาวะ) */}
-                <group
-                  position={[-0.08, 1.48, 0.55]}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (!junctionWiped) {
-                      setJunctionWiped(true);
-                      record('เช็ดอุปกรณ์และข้อต่อสายสวนปัสสาวะด้วยสำลีชุบแอลกอฮอล์ 70%');
-                    } else {
-                      setConnected((c) => !c);
-                      record(connected ? 'ปลดถุงเดิมออกจากข้อต่อสายสวนปัสสาวะ' : 'สวมหัวต่อถุงใหม่เข้ากับข้อต่อสายสวนปัสสาวะ');
-                    }
-                  }}
-                >
-                  {/* Highlight ring around the catheter junction */}
-                  <mesh rotation={[0, Math.PI / 2, 0]}>
-                    <torusGeometry args={[0.13, 0.02, 16, 32]} />
-                    <meshStandardMaterial
-                      color={junctionWiped ? '#10b981' : '#0284c7'}
-                      emissive={junctionWiped ? '#10b981' : '#0284c7'}
-                      emissiveIntensity={0.35}
-                    />
-                  </mesh>
-                  {/* Catheter funnel end */}
-                  <Block p={[-0.05, 0, 0]} s={[0.14, 0.09, 0.09]} c="#f59e0b" />
-                  {/* Stepped connector tip from bag tubing */}
-                  <Block
-                    p={[connected ? 0.05 : 0.22, connected ? 0 : -0.06, 0]}
-                    s={[0.12, 0.075, 0.075]}
-                    c={junctionWiped ? '#0d9488' : '#38bdf8'}
-                  />
-                </group>
-
-                {/* Alcohol Cotton Swab Wiping the Catheter Junction (สำลีชุบแอลกอฮอล์เช็ดข้อต่อสายสวน) */}
-                {(junctionWiped || visual === 2) && (
-                  <group
-                    position={[-0.08, 1.62, 0.62]}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setJunctionWiped(true);
-                      record('เช็ดรอบข้อต่อสายสวนปัสสาวะด้วยสำลีชุบแอลกอฮอล์');
-                    }}
-                  >
-                    <Block p={[0, 0, 0]} s={[0.14, 0.14, 0.04]} c="#e0f2fe" />
-                    <Ball p={[0, -0.06, 0.02]} s={[0.06, 0.06, 0.04]} c="#ffffff" />
-                  </group>
-                )}
-
-                {/* Bag Tubing from Catheter Junction to Active Drainage Bag */}
-                <Line
-                  points={[
-                    [connected ? 0.0 : 0.18, connected ? 1.46 : 1.4, 0.55],
-                    [0.45, 1.38, 0.57],
-                    [0.82, 1.33, 0.58]
-                  ]}
-                  color="#bae6fd"
-                  lineWidth={5}
-                />
-
-                {/* Old Bag (set aside on tray when disconnected) */}
-                {!connected && (
-                  <group position={[0.45, -0.35, -0.35]} scale={0.78}>
-                    <DrainageBag
-                      h={0.95}
-                      fill={0.05}
-                      valve={false}
-                      onValve={() => {}}
-                      onSelect={() => {
-                        setConnected(false);
-                        record('แยกถุงปัสสาวะใบเดิมออก');
-                      }}
-                    />
-                  </group>
-                )}
-
-                {/* New Clean Drainage Bag connected via tubing to the Catheter Junction */}
-                <DrainageBag
-                  h={0.95}
-                  fill={connected ? 0.15 : 0.02}
-                  valve={false}
-                  onValve={() => {}}
-                  onSelect={() => {
-                    if (!junctionWiped) {
-                      setJunctionWiped(true);
-                    }
-                    setConnected(true);
-                    record('สวมหัวต่อถุงใหม่เข้ากับข้อต่อสายสวนปัสสาวะให้แน่นสนิท');
-                  }}
-                />
-              </>
-            )}
-
             {topic === 'hygiene' && (
               <Pelvis
                 sex={sex}
@@ -1510,6 +1470,34 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
               : isTouchingFloor
               ? 'ก้นถุงแตะพื้น เสี่ยงต่อการปนเปื้อนเชื้อ'
               : 'ระดับเหมาะสม: ต่ำกว่าระดับเอวและกระเพาะปัสสาวะ ไม่แตะพื้น'}
+          </div>
+        )}
+
+        {topic === 'tube' && (
+          <div
+            className={`bag-waist-badge ${
+              tubeIssue === 'dependentLoop' ? 'badge-danger' : !straight ? 'badge-warning' : 'badge-safe'
+            }`}
+          >
+            {tubeIssue === 'dependentLoop'
+              ? '⚠️ สายคล้อยห้อยท้องช้าง (Dependent loop): น้ำปัสสาวะขังคั่งค้าง เสี่ยงแบคทีเรียไหลย้อนกลับ (Reflux) สู่กระเพาะปัสสาวะ (หลักฐาน CDC & SHEA)'
+              : !straight
+              ? '⚠️ สายพับงอหรือถูกนอนทับ: น้ำปัสสาวะไม่ไหลลงถุง ให้คลายจุดพับและยกสายพาดบนหน้าขา'
+              : '✅ สายพาดบนขาและลาดเทตรงสู่ถุง: น้ำปัสสาวะไหลสะดวกตามแรงโน้มถ่วง'}
+          </div>
+        )}
+
+        {topic === 'secure' && (
+          <div className="bag-waist-badge badge-safe">
+            {sex === 'female'
+              ? '👩 ผู้ป่วยเพศหญิง: แปะเทปยึดสายที่หน้าขา (Anterior thigh) เหลือระยะหย่อนพอดี ไม่ดึงรั้ง'
+              : '👨 ผู้ป่วยเพศชาย: แปะเทปยึดสายบริเวณหัวหน่าวหรือท้องน้อย (ลดแรงดึงรั้งที่มุม Penoscrotal junction)'}
+          </div>
+        )}
+
+        {topic === 'followup' && (
+          <div className="bag-waist-badge badge-safe">
+            🔒 คงสภาพระบบปิด (Closed System): เปลี่ยนสายเมื่อชำรุด หลุด รั่ว หรือมีตะกอนค้าง · ห้ามเปลี่ยนเองหรือปลดข้อต่อ
           </div>
         )}
 
@@ -1610,6 +1598,34 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
               <strong>{handPhases[phase]}</strong>
               <small>แนะนำถูอย่างน้อย 15–20 วินาทีในแต่ละท่า เพื่อฆ่าเชื้อโรคให้ทั่วถึง</small>
             </div>
+            {onOpenHandVideo && (
+              <div style={{ margin: '8px 0 10px', textAlign: 'center' }}>
+                <button
+                  type="button"
+                  className="hand-video-btn"
+                  onClick={() => {
+                    onOpenHandVideo();
+                    record('เปิดดูคลิปวิดีโอสาธิตการล้างมือ 7 ขั้นตอนของจริง');
+                  }}
+                  style={{
+                    background: 'linear-gradient(135deg, #0d9488 0%, #0f766e 100%)',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '24px',
+                    padding: '8px 18px',
+                    fontSize: '13px',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    boxShadow: '0 3px 8px rgba(13, 148, 136, 0.3)',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px'
+                  }}
+                >
+                  🎬 ชมคลิปวิดีโอสาธิตการล้างมือ 7 ขั้นตอนของจริง (กรมควบคุมโรค / ศิริราช)
+                </button>
+              </div>
+            )}
             <div className="hand-steps-interactive-grid">
               {handPhases.map((hp, i) => (
                 <button
@@ -1628,7 +1644,7 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
             </div>
             {hint && (
               <p aria-live="polite" className="hand-current-cue">
-                กำลังสาธิต: <strong>{handPhases[phase]}</strong> (คลิกเลือกเปลี่ยนท่าได้ หรือคลิกที่มือ 3 มิติเพื่อขยับได้ค่ะ)
+                กำลังสาธิต: <strong>{handPhases[phase]}</strong> (คลิกเลือกเปลี่ยนท่าได้ หรือกดชมคลิปวิดีโอสาธิตของจริงได้ค่ะ)
               </p>
             )}
           </div>
@@ -1678,12 +1694,42 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
         {topic === 'secure' && (
           <>
             <div className="control-row">
-              <button className={tape === 1 ? 'selected' : ''} onClick={() => chooseTape(1)}>
-                แปะเทปที่หน้าขาขวา
+              <button
+                className={sex === 'female' ? 'selected' : ''}
+                onClick={() => {
+                  handleSexChange('female');
+                  setTape(1);
+                  record('เลือกเพศหญิง: แปะเทปที่หน้าขา');
+                }}
+              >
+                👩 เพศหญิง (แปะหน้าขา)
               </button>
-              <button className={tape === 2 ? 'selected' : ''} onClick={() => chooseTape(2)}>
-                แปะเทปที่หน้าขาซ้าย
+              <button
+                className={sex === 'male' ? 'selected' : ''}
+                onClick={() => {
+                  handleSexChange('male');
+                  setTape(1);
+                  record('เลือกเพศชาย: แปะเทปบริเวณหัวหน่าวหรือท้องน้อย');
+                }}
+              >
+                👨 เพศชาย (แปะหัวหน่าว/ท้องน้อย)
               </button>
+            </div>
+            <div className="control-row">
+              {sex === 'female' ? (
+                <>
+                  <button className={tape === 1 ? 'selected' : ''} onClick={() => chooseTape(1)}>
+                    แปะเทปที่หน้าขาขวา
+                  </button>
+                  <button className={tape === 2 ? 'selected' : ''} onClick={() => chooseTape(2)}>
+                    แปะเทปที่หน้าขาซ้าย
+                  </button>
+                </>
+              ) : (
+                <button className={tape > 0 ? 'selected' : ''} onClick={() => chooseTape(1)}>
+                  แปะเทปบริเวณหัวหน่าว / ท้องน้อย
+                </button>
+              )}
               <button
                 className={slackTight ? 'selected' : ''}
                 onClick={() => {
@@ -1704,27 +1750,58 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
             </div>
             {hint && (
               <p>
-                {tape === 0
-                  ? 'แตะหน้าขาฝั่งใดฝั่งหนึ่งเพื่อติดเทปยึดสาย'
-                  : slackTight
-                  ? 'ข้อควรระวัง: อย่าดึงสายตึงรั้งจนเกินไป เพราะจะดึงรั้งกระเพาะปัสสาวะและทำให้เจ็บ'
-                  : 'ตำแหน่งเหมาะสม: แปะเทปที่หน้าขา ปล่อยระยะหย่อนพอดี มีระยะเผื่อขยับตัวได้'}
+                {sex === 'female'
+                  ? 'เพศหญิง: แปะเทปยึดสายที่หน้าขาข้างใดข้างหนึ่ง เหลือระยะหย่อนพอดี ไม่ดึงรั้ง'
+                  : 'เพศชาย: แปะเทปยึดสายที่บริเวณหัวหน่าวหรือท้องน้อย เพื่อป้องกันแรงดึงรั้งที่มุม Penoscrotal junction'}
               </p>
             )}
           </>
         )}
 
         {topic === 'tube' && (
-          <div className="control-row">
-            <button
-              onClick={() => {
-                setStraight((s) => !s);
-                record(straight ? 'จำลองสถานการณ์สายพับงอ' : 'คลายสายพับงอโดยไม่ดึงสาย');
-              }}
-            >
-              {straight ? 'จำลองสายพับงอ' : 'คลายสายพับงอให้ไหลสะดวก'}
-            </button>
-          </div>
+          <>
+            <div className="control-row">
+              <button
+                className={straight && tubeIssue === 'normal' ? 'selected' : ''}
+                onClick={() => {
+                  setStraight(true);
+                  setTubeIssue('normal');
+                  record('จัดสายให้พาดบนขาและลาดเทตรงลงสู่ถุงอย่างถูกต้อง');
+                }}
+              >
+                ✅ 1. สายพาดบนขา ลาดเทตรง (ถูกต้อง)
+              </button>
+              <button
+                className={!straight || tubeIssue === 'kink' ? 'selected' : ''}
+                onClick={() => {
+                  setStraight(false);
+                  setTubeIssue('kink');
+                  record('จำลองสถานการณ์สายพับงอหรือถูกนอนทับ');
+                }}
+              >
+                ⚠️ 2. จำลองสายพับงอ / ถูกนอนทับ
+              </button>
+              <button
+                className={tubeIssue === 'dependentLoop' ? 'selected' : ''}
+                onClick={() => {
+                  setStraight(true);
+                  setTubeIssue('dependentLoop');
+                  record('จำลองสายคล้อยห้อยท้องช้าง (Dependent loop)');
+                }}
+              >
+                ⚠️ 3. จำลองสายคล้อยห้อยท้องช้าง (เสี่ยงติดเชื้อ)
+              </button>
+            </div>
+            {hint && (
+              <p>
+                {tubeIssue === 'dependentLoop'
+                  ? 'หลักฐานทางการแพทย์ (CDC / SHEA / AACN): ห้ามสายห้อยท้องช้างเด็ดขาด เพราะทำให้น้ำปัสสาวะขังคั่งค้าง เชื้อแบคทีเรียเจริญเติบโต และไหลย้อนกลับ (Reflux) สู่กระเพาะปัสสาวะ จึงต้องจัดให้สายลาดเทตรงเสมอ'
+                  : !straight
+                  ? 'เมื่อสายพับงอหรือถูกทับ ปัสสาวะจะไม่สามารถไหลลงถุงได้ ให้คลายจุดพับแล้วยกสายมาพาดบนหน้าขาอย่างนุ่มนวล'
+                  : 'แนวทางที่ถูกต้อง: ให้สายพาดบนหน้าขา ลาดเทตรงลงสู่ถุงอย่างสม่ำเสมอตามแรงโน้มถ่วง'}
+              </p>
+            )}
+          </>
         )}
 
         {topic === 'trouble' && (
@@ -1799,52 +1876,37 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
           </>
         )}
 
-        {topic === 'change' && (
+        {topic === 'followup' && (
           <>
             <div className="control-row">
               <button
-                className={junctionFolded ? 'selected' : ''}
                 onClick={() => {
-                  setJunctionFolded((f) => !f);
-                  record(junctionFolded ? 'คลายสายสวนปัสสาวะที่พับไว้' : '1. พับสายสวนปัสสาวะเหนือข้อต่อไว้ชั่วคราว');
+                  record('ตรวจใบนัดหมายเปลี่ยนสายที่สถานพยาบาล');
                 }}
               >
-                {junctionFolded ? 'คลายสายสวนที่พับไว้' : '1. พับสายสวนเหนือข้อต่อ'}
+                🗓️ 1. ตรวจใบนัดสถานพยาบาล
               </button>
               <button
-                className={junctionWiped ? 'selected' : ''}
                 onClick={() => {
-                  setJunctionWiped(true);
-                  record('2. เช็ดอุปกรณ์ ข้อต่อสายสวน และถุงด้วยแอลกอฮอล์ 70%');
+                  record('ข้อบ่งชี้เปลี่ยนสาย: ชำรุด หลุด รั่ว หรือมีตะกอนค้างปัสสาวะไม่ลงถุง');
                 }}
               >
-                2. เช็ดอุปกรณ์ ข้อต่อ และถุงด้วยแอลกอฮอล์ 70%
+                ⚠️ 2. เปลี่ยนเมื่อ: ชำรุด / หลุด / รั่ว / มีตะกอนค้าง
               </button>
               <button
-                className={!connected ? 'selected' : ''}
+                className="selected"
                 onClick={() => {
-                  setConnected(false);
-                  record('3. ปลดถุงปัสสาวะใบเดิมออกจากข้อต่อสายสวนปัสสาวะ');
+                  record('เน้นย้ำ: ไม่แนะนำให้เปลี่ยนเองหรือปลดข้อต่อ เพื่อคงสภาพระบบปิด ป้องกันการติดเชื้อ');
                 }}
               >
-                3. ปลดถุงเดิมที่ข้อต่อสายสวน
-              </button>
-              <button
-                className={connected && junctionWiped ? 'selected' : ''}
-                onClick={() => {
-                  setJunctionWiped(true);
-                  setConnected(true);
-                  setJunctionFolded(false);
-                  record('4. สวมหัวต่อถุงใหม่เข้ากับข้อต่อสายสวนให้แน่นสนิท (ไม่แตะด้านในข้อต่อ)');
-                }}
-              >
-                4. สวมหัวต่อถุงใหม่เข้ากับข้อต่อสายสวน
+                🔒 3. คงระบบปิด (ห้ามเปลี่ยนเองหรือปลดข้อต่อ)
               </button>
             </div>
-            <p>
-              ตำแหน่งข้อต่อสายสวน: {junctionWiped ? 'เช็ดแอลกอฮอล์รอบข้อต่อแล้ว · ' : 'ต้องเช็ดแอลกอฮอล์ก่อนปลดข้อต่อ · '}
-              สถานะ: {connected ? 'สวมต่อถุงใหม่ที่ข้อต่อสายสวนแน่นสนิท' : 'ปลดถุงเดิมออกจากข้อต่อสายสวนแล้ว'}
-            </p>
+            {hint && (
+              <p>
+                <strong>คำแนะนำจากทีมพยาบาล:</strong> เปลี่ยนสายเมื่อสายชำรุด หลุด รั่ว หรือมีตะกอนค้าง ปัสสาวะไม่ลงถุง ไม่แนะนำให้เปลี่ยนเอง หรือปลดข้อต่อ เพื่อคงสภาพสายสวนปัสสาวะและถุงรองรับปัสสาวะให้เป็นระบบปิด เพื่อป้องกันการติดเชื้อค่ะ
+              </p>
+            )}
           </>
         )}
 
@@ -1854,74 +1916,109 @@ export default function GuidedScene({ topic, visual, paused, speaking = false, m
               <button
                 className={sex === 'female' ? 'selected' : ''}
                 onClick={() => {
-                  setSex('female');
+                  handleSexChange('female');
                   setWipe(true);
                   setPhase(0);
-                  record('เลือกหุ่นจำลองผู้หญิง');
+                  record('เลือกหุ่นจำลองเพศหญิง: เช็ดหน้าไปหลังทิศทางเดียว');
                 }}
               >
-                หุ่นจำลองผู้หญิง
+                👩 หุ่นจำลองเพศหญิง (เช็ดหน้าไปหลัง)
               </button>
               <button
                 className={sex === 'male' ? 'selected' : ''}
                 onClick={() => {
-                  setSex('male');
+                  handleSexChange('male');
                   setWipe(true);
                   setPhase(0);
-                  record('เลือกหุ่นจำลองผู้ชาย');
+                  record('เลือกหุ่นจำลองเพศชาย: รูดเปิดเบา ๆ ล้างสบู่อ่อน');
                 }}
               >
-                หุ่นจำลองผู้ชาย
+                👨 หุ่นจำลองเพศชาย (รูดเปิดเบา ๆ ล้างสบู่อ่อน)
               </button>
             </div>
             <div className="control-row">
-              <button
-                className={wipe && phase === 0 ? 'selected' : ''}
-                onClick={() => {
-                  setPhase(0);
-                  setWipe(true);
-                  record('ฟอกทำความสะอาดด้วยสบู่อ่อน');
-                }}
-              >
-                1. ล้างด้วยสบู่อ่อน (เกิดฟองสบู่)
-              </button>
-              <button
-                className={wipe && phase === 1 ? 'selected' : ''}
-                onClick={() => {
-                  setPhase(1);
-                  setWipe(true);
-                  record('ราดน้ำสะอาดล้างฟองสบู่ออก');
-                }}
-              >
-                2. ราดน้ำสะอาด (ล้างสบู่ไหลออก)
-              </button>
-              <button
-                className={wipe && phase === 2 ? 'selected' : ''}
-                onClick={() => {
-                  setPhase(2);
-                  setWipe(true);
-                  record('ซับให้แห้งด้วยผ้าสะอาด');
-                }}
-              >
-                3. ซับให้แห้งด้วยผ้าสะอาด
-              </button>
-              {sex === 'male' && (
-                <button
-                  className={phase === 3 ? 'selected' : ''}
-                  onClick={() => {
-                    setPhase(3);
-                    record('รูดหนังหุ้มปลายกลับทันที');
-                  }}
-                >
-                  4. รูดหนังหุ้มปลายกลับทันที
-                </button>
+              {sex === 'female' ? (
+                <>
+                  <button
+                    className={wipe && phase === 0 ? 'selected' : ''}
+                    onClick={() => {
+                      setPhase(0);
+                      setWipe(true);
+                      record('1. ล้างด้วยสบู่อ่อน: เช็ดทิศทางเดียวจากหน้าไปหลัง (ห้ามถูย้อน)');
+                    }}
+                  >
+                    1. ฟอกสบู่อ่อน (เช็ดหน้าไปหลัง)
+                  </button>
+                  <button
+                    className={wipe && phase === 1 ? 'selected' : ''}
+                    onClick={() => {
+                      setPhase(1);
+                      setWipe(true);
+                      record('2. ราดน้ำสะอาดล้างฟองสบู่ออก');
+                    }}
+                  >
+                    2. ราดน้ำสะอาดล้างฟองสบู่
+                  </button>
+                  <button
+                    className={wipe && phase === 2 ? 'selected' : ''}
+                    onClick={() => {
+                      setPhase(2);
+                      setWipe(true);
+                      record('3. ซับให้แห้งด้วยผ้าสะอาด');
+                    }}
+                  >
+                    3. ซับให้แห้งด้วยผ้าสะอาด
+                  </button>
+                </>
+              ) : (
+                <>
+                  <button
+                    className={wipe && phase === 0 ? 'selected' : ''}
+                    onClick={() => {
+                      setPhase(0);
+                      setWipe(true);
+                      record('1. รูดเปิดหนังหุ้มปลายเบา ๆ และล้างด้วยสบู่อ่อนรอบรูเปิด');
+                    }}
+                  >
+                    1. รูดเปิดเบา ๆ ฟอกสบู่อ่อน
+                  </button>
+                  <button
+                    className={wipe && phase === 1 ? 'selected' : ''}
+                    onClick={() => {
+                      setPhase(1);
+                      setWipe(true);
+                      record('2. ราดน้ำสะอาดล้างฟองสบู่ออก');
+                    }}
+                  >
+                    2. ราดน้ำสะอาดล้างฟองสบู่
+                  </button>
+                  <button
+                    className={wipe && phase === 2 ? 'selected' : ''}
+                    onClick={() => {
+                      setPhase(2);
+                      setWipe(true);
+                      record('3. ซับให้แห้งด้วยผ้าสะอาด');
+                    }}
+                  >
+                    3. ซับให้แห้งด้วยผ้าสะอาด
+                  </button>
+                  <button
+                    className={phase === 3 ? 'selected' : ''}
+                    onClick={() => {
+                      setPhase(3);
+                      record('4. รูดหนังหุ้มปลายกลับเข้าที่เดิมทันที');
+                    }}
+                  >
+                    4. รูดหนังหุ้มปลายกลับทันที
+                  </button>
+                </>
               )}
             </div>
             {hint && (
               <p>
                 {sex === 'female'
-                  ? 'ผู้หญิง: เน้นย้ำทำความสะอาดทิศทางเดียวเสมอ โดยเช็ดจากด้านหน้าไปด้านหลัง (ห้ามเช็ดถูย้อนไปย้อนมาเด็ดขาด) ราดน้ำสะอาดล้างฟองสบู่ออก แล้วซับให้แห้งสนิท'
-                  : 'ผู้ชาย: รูดหนังหุ้มปลายเท่าที่ทำได้โดยไม่ฝืน ล้างด้วยสบู่อ่อน ราดน้ำสะอาด แล้วรูดหนังหุ้มปลายกลับทันที'}
+                  ? 'เน้นย้ำผู้หญิง: ทำความสะอาดทิศทางเดียวจากหน้าไปหลัง (รูเปิดท่อปัสสาวะไปทวารหนัก) ห้ามถูย้อนไปมาเด็ดขาด'
+                  : 'เน้นย้ำผู้ชาย: รูดหนังหุ้มปลายเบา ๆ ล้างสบู่อ่อนรอบรูเปิด แล้วต้องรูดหนังหุ้มปลายกลับเข้าที่เดิมทันที'}
               </p>
             )}
           </>

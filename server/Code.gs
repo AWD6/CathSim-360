@@ -64,8 +64,8 @@ function confidentialLinks_(a){
 function updatePatientSummary_(code){
   try{
     const book=book_();if(!book||!book.insertSheet)return;
-    const limits={hands:3,hygiene:5,position:4,tube:3,secure:3,drain:5,change:5,followup:2,water:3,trouble:3};
-    const totalSteps=36;
+    const limits={hands:3,hygiene:4,position:4,tube:3,secure:3,drain:5,followup:3,water:3,trouble:3};
+    const totalSteps=31;
     const evs=patientEvents_(code);
     const acc=rows_('Accounts').find(r=>r[0]===code);
     const uname=acc&&acc[5]?String(acc[5]):code;
@@ -91,7 +91,7 @@ function updatePatientSummary_(code){
     if(!sh){sh=book.insertSheet('PatientSummary');sh.appendRow(['cs_id','username','last_learned_at','topics_learned','confirmed_steps','total_steps','score_percent','pass_status_80','learned_topics_list','completions_summary','total_completions']);if(sh.setFrozenRows)sh.setFrozenRows(1);}
     const allRows=sh.getDataRange().getValues();
     for(let i=allRows.length-1;i>0;i--){if(allRows[i][0]===code&&sh.deleteRow)sh.deleteRow(i+1);}
-    sh.appendRow([code,uname,lastTime||new Date().toISOString(),topicsList.length+'/10',confirmedCount,totalSteps,scorePercent+'%',passStatus,topicsList.join(', '),completionsSummary,totalCompletions]);
+    sh.appendRow([code,uname,lastTime||new Date().toISOString(),topicsList.length+'/9',confirmedCount,totalSteps,scorePercent+'%',passStatus,topicsList.join(', '),completionsSummary,totalCompletions]);
   }catch(_){}
 }
 function doPost(e){

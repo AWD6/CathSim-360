@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { sources } from './curriculum';
 import {
   topics,
+  getHygieneSteps,
   countdownTick,
   normalizeCsId,
   isValidCsId,
@@ -362,8 +363,25 @@ export default function Portal() {
     duckMusic(narrating);
   }, [narrating]);
 
+  const [patientSex, setPatientSex] = useState<'female' | 'male'>(() => {
+    try {
+      const saved = localStorage.getItem('cathsim:patient-sex');
+      if (saved === 'female' || saved === 'male') return saved;
+    } catch {}
+    return 'female';
+  });
+  const [showHandWashVideo, setShowHandWashVideo] = useState(false);
+  const [activeHandVideoTab, setActiveHandVideoTab] = useState<'ddc' | 'siriraj'>('ddc');
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('cathsim:patient-sex', patientSex);
+    } catch {}
+  }, [patientSex]);
+
   const topic = topics[index];
-  const current = topic?.steps[step];
+  const activeSteps = topic?.id === 'hygiene' ? getHygieneSteps(patientSex) : (topic?.steps ?? []);
+  const current = activeSteps[Math.min(step, Math.max(0, activeSteps.length - 1))] ?? activeSteps[0];
 
   // Only play voice clips after authenticated into Home or Lesson
   const clip = !isAuthenticated
@@ -714,7 +732,7 @@ export default function Portal() {
         return next;
       });
 
-      if (step < topic.steps.length - 1) {
+      if (step < activeSteps.length - 1) {
         setStep((s) => s + 1);
       } else {
         setFinished(true);
@@ -730,7 +748,7 @@ export default function Portal() {
         }
       }
     },
-    [finished, view, patientSession, topic, step, mode]
+    [finished, view, patientSession, topic, step, mode, patientSex, activeSteps]
   );
 
   // Practice mode 8-second auto-advance countdown tick
@@ -1639,14 +1657,14 @@ export default function Portal() {
                         ? 'เสียงยังโหลดไม่ได้ แตะปุ่มเริ่มฟังเพื่อลองใหม่ค่ะ'
                         : narrating
                         ? 'พยาบาลน้องโฟร์กำลังทักทายคุณ...'
-                        : 'เลือกเรื่องที่ต้องการเรียนรู้ทั้ง 10 เรื่องด้านล่างได้เลยค่ะ'}
+                        : `เลือกเรื่องที่ต้องการเรียนรู้ทั้ง ${topics.length} เรื่องด้านล่างได้เลยค่ะ`}
                     </span>
                   </div>
                 </section>
 
                 <div className="learning-heading">
                   <h2>วันนี้อยากให้พยาบาลน้องโฟร์ช่วยดูแลเรื่องไหนคะ?</h2>
-                  <p>เรียนรู้ครบทั้ง 10 เรื่อง ดูภาพสาธิต 3 มิติ และกด “ทำแล้ว” เพื่อบันทึกการเรียนรู้ค่ะ</p>
+                  <p>เรียนรู้ครบทั้ง {topics.length} เรื่อง ดูภาพสาธิต 3 มิติ และกด “ทำแล้ว” เพื่อบันทึกการเรียนรู้ค่ะ</p>
                 </div>
 
                 <div className="lesson-grid">
@@ -1691,7 +1709,7 @@ export default function Portal() {
                       {index + 1}. {topic.title}
                     </strong>
                     <span className="lesson-step-badge">
-                      {finished ? 'สาธิตครบแล้ว' : `ขั้นที่ ${step + 1} / ${topic.steps.length}`}
+                      {finished ? 'สาธิตครบแล้ว' : `ขั้นที่ ${step + 1} / ${activeSteps.length}`}
                     </span>
                   </div>
                 </div>
@@ -1705,6 +1723,9 @@ export default function Portal() {
                       paused={paused}
                       speaking={narrating}
                       mode={mode}
+                      sex={patientSex}
+                      onSexChange={setPatientSex}
+                      onOpenHandVideo={() => setShowHandWashVideo(true)}
                       onAction={(a) => {
                         actions.current = [...actions.current, a].slice(-80);
                       }}
@@ -1723,7 +1744,7 @@ export default function Portal() {
                           <strong>
                             {finished
                               ? 'ผ่านการลองทำครบทุกขั้นตอนในหัวข้อนี้แล้วค่ะ'
-                              : `โหมดลองเอง (ขั้นที่ ${step + 1}/${topic.steps.length}): ฟังพยาบาลน้องโฟร์แล้วกดทำในจอสาธิต`}
+                              : `โหมดลองเอง (ขั้นที่ ${step + 1}/${activeSteps.length}): ฟังพยาบาลน้องโฟร์แล้วกดทำในจอสาธิต`}
                           </strong>
                           {needsStart && (
                             <button className="portal-primary" onClick={play}>
@@ -1776,6 +1797,53 @@ export default function Portal() {
                   {/* Spoken Step Text Panel (Shown in CathLearn and CathPractice modes) */}
                   {mode !== 'challenge' && (
                     <div className="spoken-step">
+                      {/* Gender Selector Bar for hygiene (ทำความสะอาดอวัยวะสืบพันธุ์) and secure (ยึดสายไม่ให้ดึงรั้ง) */}
+                      {(topic.id === 'hygiene' || topic.id === 'secure') && (
+                        <div className="gender-selector-bar">
+                          <span className="gender-bar-label">
+                            {topic.id === 'hygiene' ? 'เลือกแนวทางตามเพศ:' : 'เลือกตำแหน่งยึดสายตามเพศ:'}
+                          </span>
+                          <div className="gender-segmented-pill" role="group" aria-label="เลือกเพศผู้ป่วย">
+                            <button
+                              type="button"
+                              className={`gender-pill-btn ${patientSex === 'female' ? 'active' : ''}`}
+                              onClick={() => {
+                                setPatientSex('female');
+                                setStep(0);
+                                setReady(false);
+                              }}
+                            >
+                              👩 เพศหญิง {topic.id === 'secure' ? '(แปะหน้าขา)' : '(เช็ดหน้าไปหลัง)'}
+                            </button>
+                            <button
+                              type="button"
+                              className={`gender-pill-btn ${patientSex === 'male' ? 'active' : ''}`}
+                              onClick={() => {
+                                setPatientSex('male');
+                                setStep(0);
+                                setReady(false);
+                              }}
+                            >
+                              👨 เพศชาย {topic.id === 'secure' ? '(แปะหัวหน่าว/ท้องน้อย)' : '(เปิดเบาๆ/ฟอกสบู่อ่อน)'}
+                            </button>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Official Hand Wash Demonstration Video Button for hands topic */}
+                      {topic.id === 'hands' && (
+                        <div className="hand-video-action-box">
+                          <button
+                            type="button"
+                            className="hand-video-modal-btn"
+                            onClick={() => setShowHandWashVideo(true)}
+                          >
+                            <span style={{ fontSize: '18px' }}>🧼🎬</span>
+                            <span>ชมคลิปวิดีโอสาธิตการล้างมือ 7 ขั้นตอน (กรมควบคุมโรค / ศิริราช)</span>
+                          </button>
+                        </div>
+                      )}
+
                       <span className="gentle-label">
                         {finished
                           ? 'ขอบคุณที่ดูแลไปด้วยกันค่ะ'
@@ -1914,7 +1982,7 @@ export default function Portal() {
 
                 {/* Step Navigation Dots */}
                 <div className="step-dots">
-                  {topic.steps.map((s, i) => (
+                  {activeSteps.map((s, i) => (
                     <button
                       className={i === step ? 'active' : ''}
                       key={i}
@@ -2344,7 +2412,7 @@ export default function Portal() {
                         </div>
                       </div>
 
-                      <h3>ตารางผลลัพธ์การเรียนรู้รายเรื่องของ {selectedPatientReport.csId} (ครบทั้ง 10 เรื่อง)</h3>
+                      <h3>ตารางผลลัพธ์การเรียนรู้รายเรื่องของ {selectedPatientReport.csId} (ครบทั้ง {topics.length} เรื่อง)</h3>
                       <div className="table-scroll">
                         <table>
                           <thead>
@@ -2543,16 +2611,12 @@ export default function Portal() {
                   <h3>แนวทางของโรงพยาบาลมหาราชนครเชียงใหม่</h3>
                   <ul>
                     <li>
-                      <strong>การเปลี่ยนสายสวนปัสสาวะ:</strong> นัดเปลี่ยนสายที่สถานพยาบาลใกล้บ้านทุก 2 สัปดาห์ หรือตามใบนัดของแพทย์
-                      (ห้ามผู้ป่วยหรือผู้ดูแลถอดหรือใส่สายเองที่บ้าน)
+                      <strong>การนัดหมายและคงสภาพระบบปิด:</strong> นัดเปลี่ยนสายที่สถานพยาบาลใกล้บ้านทุก 2 สัปดาห์ หรือตามใบนัดของแพทย์
+                      และเปลี่ยนเมื่อสายชำรุด หลุด รั่ว หรือมีตะกอนค้าง ปัสสาวะไม่ลงถุง ไม่แนะนำให้เปลี่ยนเองหรือปลดข้อต่อ เพื่อคงสภาพสายสวนปัสสาวะและถุงรองรับปัสสาวะให้เป็นระบบปิด (Closed System) เพื่อป้องกันการติดเชื้อ
                     </li>
                     <li>
-                      <strong>การเปลี่ยนถุงปัสสาวะ:</strong> โรงพยาบาลมหาราชนครเชียงใหม่แนะนำให้เปลี่ยนถุงทุกสัปดาห์
-                      โดยใช้วิธีปลอดเชื้อ (Non-touch technique)
-                    </li>
-                    <li>
-                      <strong>การทำความสะอาดอวัยวะเพศ:</strong> แนะนำทำความสะอาดวันละ 3 ครั้ง ปรับตามเวลาตื่นนอนและทำเพิ่มเมื่อเปื้อน
-                      โดยใช้สบู่อ่อนกับน้ำสะอาด ล้างและซับให้แห้ง
+                      <strong>การทำความสะอาดอวัยวะสืบพันธุ์:</strong> แนะนำทำความสะอาดวันละ 3 ครั้ง ปรับตามเวลาตื่นนอนและทำเพิ่มเมื่อเปื้อน
+                      โดยใช้สบู่อ่อนกับน้ำสะอาด ล้างและซับให้แห้ง (เพศหญิงเช็ดจากหน้าไปหลังทางเดียวเสมอ เพศชายรูดเปิดทำความสะอาดแล้วรูดกลับทันที)
                     </li>
                     <li>
                       <strong>การดื่มน้ำ:</strong> หากไม่มีข้อจำกัดทางการแพทย์ (เช่น โรคหัวใจหรือโรคไต) แนะนำดื่มน้ำ 2.5–3 ลิตรต่อวัน
@@ -2575,6 +2639,123 @@ export default function Portal() {
               </section>
             )}
           </>
+        )}
+
+        {/* Official Hand Hygiene 7-Step Demonstration Video Modal */}
+        {showHandWashVideo && (
+          <div
+            className="hand-wash-modal-backdrop"
+            onClick={() => setShowHandWashVideo(false)}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="hand-wash-modal-title"
+          >
+            <div className="hand-wash-modal-card" onClick={(e) => e.stopPropagation()}>
+              <div className="hand-wash-modal-header">
+                <div className="hand-wash-modal-title">
+                  <span className="modal-icon">🧼</span>
+                  <div>
+                    <h3 id="hand-wash-modal-title">คลิปวิดีโอสาธิตการล้างมือ 7 ขั้นตอนตามหลักการแพทย์</h3>
+                    <p>เทคนิคการล้างมือ 7 ขั้นตอนมาตรฐานสากล ป้องกันการติดเชื้อ CAUTI ในผู้ป่วยคาสายสวนปัสสาวะ</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="hand-wash-modal-close"
+                  onClick={() => setShowHandWashVideo(false)}
+                  aria-label="ปิดวิดีโอ"
+                >
+                  ✕
+                </button>
+              </div>
+
+              {/* Video Source Tabs */}
+              <div className="hand-wash-video-tabs">
+                <button
+                  type="button"
+                  className={`video-tab-btn ${activeHandVideoTab === 'ddc' ? 'active' : ''}`}
+                  onClick={() => setActiveHandVideoTab('ddc')}
+                >
+                  🏛️ กองโรคติดต่อทั่วไป กรมควบคุมโรค กระทรวงสาธารณสุข
+                </button>
+                <button
+                  type="button"
+                  className={`video-tab-btn ${activeHandVideoTab === 'siriraj' ? 'active' : ''}`}
+                  onClick={() => setActiveHandVideoTab('siriraj')}
+                >
+                  🏥 คณะแพทยศาสตร์ศิริราชพยาบาล (Siriraj Channel)
+                </button>
+              </div>
+
+              {/* 16:9 Responsive Embed */}
+              <div className="hand-wash-iframe-container">
+                <iframe
+                  src={
+                    activeHandVideoTab === 'ddc'
+                      ? 'https://www.youtube-nocookie.com/embed/D5af_nAfEhY?autoplay=1&rel=0'
+                      : 'https://www.youtube-nocookie.com/embed/leHVk7bEhVg?autoplay=1&rel=0'
+                  }
+                  title="คลิปสาธิตการล้างมือ 7 ขั้นตอน"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                  allowFullScreen
+                />
+              </div>
+
+              {/* 7 Mnemonic Steps Cards: หน้า หลัง กลาง ปั้น โป้ง ปลาย ข้อ */}
+              <div className="hand-wash-7steps-summary">
+                <h4>📌 เคล็ดลับการจำ 7 ขั้นตอน: หน้า · หลัง · กลาง · ปั้น · โป้ง · ปลาย · ข้อ</h4>
+                <div className="hand-steps-card-grid">
+                  <div className="hand-mnemonic-card">
+                    <span className="step-num">1</span>
+                    <strong>หน้า</strong>
+                    <p>ฝ่ามือถูกัน</p>
+                  </div>
+                  <div className="hand-mnemonic-card">
+                    <span className="step-num">2</span>
+                    <strong>หลัง</strong>
+                    <p>ฝ่ามือถูหลังมือและซอกนิ้ว</p>
+                  </div>
+                  <div className="hand-mnemonic-card">
+                    <span className="step-num">3</span>
+                    <strong>กลาง</strong>
+                    <p>ฝ่ามือถูฝ่ามือและนิ้วถูซอกนิ้ว</p>
+                  </div>
+                  <div className="hand-mnemonic-card">
+                    <span className="step-num">4</span>
+                    <strong>ปั้น</strong>
+                    <p>หลังนิ้วมือถูฝ่ามือ (กำปั้น)</p>
+                  </div>
+                  <div className="hand-mnemonic-card">
+                    <span className="step-num">5</span>
+                    <strong>โป้ง</strong>
+                    <p>ถูนิ้วหัวแม่มือโดยรอบ</p>
+                  </div>
+                  <div className="hand-mnemonic-card">
+                    <span className="step-num">6</span>
+                    <strong>ปลาย</strong>
+                    <p>ปลายนิ้วมือถูขวางฝ่ามือ</p>
+                  </div>
+                  <div className="hand-mnemonic-card">
+                    <span className="step-num">7</span>
+                    <strong>ข้อ</strong>
+                    <p>ถูรอบข้อมือทั้งสองข้าง</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="hand-wash-modal-footer">
+                <span>* ล้างด้วยสบู่และน้ำสะอาดอย่างน้อย 20 วินาที แล้วเช็ดให้แห้งสนิทด้วยผ้าหรือกระดาษเช็ดมือสะอาด</span>
+                <button
+                  type="button"
+                  className="portal-primary"
+                  style={{ padding: '8px 18px', fontSize: '13px' }}
+                  onClick={() => setShowHandWashVideo(false)}
+                >
+                  เข้าใจแล้ว · กลับไปดูสาธิต 3D
+                </button>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Modern Footer */}

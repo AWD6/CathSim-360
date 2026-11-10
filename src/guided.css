@@ -3742,3 +3742,287 @@
   background: #047857;
   color: #ffffff;
 }
+
+/* ========================================================
+   Gender Selector & Hand Hygiene 7-Step Video Modal
+   ======================================================== */
+.gender-selector-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 10px 0 16px;
+  padding: 8px 14px;
+  background: #f0fdf4;
+  border: 1.5px solid #86efac;
+  border-radius: 14px;
+  flex-wrap: wrap;
+}
+
+.gender-selector-label {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #166534;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.gender-segmented-pill {
+  display: inline-flex;
+  background: #e2e8f0;
+  padding: 3px;
+  border-radius: 999px;
+  gap: 3px;
+}
+
+.gender-pill-btn {
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 700;
+  padding: 6px 16px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.gender-pill-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.65);
+  color: #0f172a;
+}
+
+.gender-pill-btn.active {
+  background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(13, 148, 136, 0.28);
+}
+
+.hand-video-action-box {
+  margin: 10px 0 16px;
+}
+
+.hand-video-modal-btn {
+  width: 100%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 12px;
+  padding: 12px 18px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 3px 12px rgba(13, 148, 136, 0.28);
+  transition: all 0.2s ease;
+}
+
+.hand-video-modal-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 16px rgba(13, 148, 136, 0.38);
+}
+
+/* Hand Hygiene Video Modal */
+.hand-wash-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.72);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 99999;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.hand-wash-modal-card {
+  background: #ffffff;
+  border-radius: 20px;
+  max-width: 820px;
+  width: 100%;
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: modalFadeIn 0.25s ease-out;
+}
+
+@keyframes modalFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.hand-wash-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 18px 24px 14px;
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%);
+  border-bottom: 1px solid #d1fae5;
+}
+
+.hand-wash-modal-title {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.hand-wash-modal-title .modal-icon {
+  font-size: 32px;
+}
+
+.hand-wash-modal-title h3 {
+  margin: 0;
+  font-size: 16px;
+  color: #065f46;
+  font-weight: 800;
+}
+
+.hand-wash-modal-title p {
+  margin: 3px 0 0;
+  font-size: 12px;
+  color: #047857;
+}
+
+.hand-wash-modal-close {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 999px;
+  width: 32px;
+  height: 32px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.hand-wash-modal-close:hover {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+
+.hand-wash-video-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 10px 24px;
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  overflow-x: auto;
+}
+
+.video-tab-btn {
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+  padding: 6px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.video-tab-btn.active {
+  background: #0d9488;
+  color: #ffffff;
+  border-color: #0d9488;
+  box-shadow: 0 2px 6px rgba(13, 148, 136, 0.25);
+}
+
+.hand-wash-iframe-container {
+  position: relative;
+  width: 100%;
+  padding-bottom: 56.25%; /* 16:9 Aspect Ratio */
+  height: 0;
+  background: #000000;
+}
+
+.hand-wash-iframe-container iframe {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.hand-wash-7steps-summary {
+  padding: 16px 24px;
+  background: #ffffff;
+  border-top: 1px solid #f1f5f9;
+}
+
+.hand-wash-7steps-summary h4 {
+  margin: 0 0 10px;
+  font-size: 13.5px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.hand-steps-card-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(95px, 1fr));
+  gap: 8px;
+}
+
+.hand-mnemonic-card {
+  background: #f0fdf4;
+  border: 1px solid #dcfce7;
+  border-radius: 10px;
+  padding: 8px 6px;
+  text-align: center;
+}
+
+.hand-mnemonic-card .step-num {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  line-height: 20px;
+  border-radius: 50%;
+  background: #0d9488;
+  color: #ffffff;
+  font-size: 11px;
+  font-weight: 700;
+  margin-bottom: 3px;
+}
+
+.hand-mnemonic-card strong {
+  display: block;
+  font-size: 13px;
+  color: #047857;
+}
+
+.hand-mnemonic-card p {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #334155;
+  line-height: 1.25;
+}
+
+.hand-wash-modal-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+  gap: 10px;
+  font-size: 12px;
+  color: #64748b;
+}
