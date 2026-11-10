@@ -3316,93 +3316,138 @@
   margin: 8px 0;
 }
 
-.welcome-speed-selector {
-  margin: 10px 0 14px;
-  padding: 4px 12px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(6px);
-  border: 1px solid #bbf0e5;
+/* ========================================================
+   Nurse Nong Four Speech Speed Control (Segmented Pill)
+   Ultra-sleek, 100% Symmetrical on Notebook, iOS, Android
+   ======================================================== */
+.nurse-speed-selector {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0 12px;
+  padding: 4px 6px 4px 12px;
+  background: #f0fdf9;
+  border: 1px solid #ccfbf1;
   border-radius: 999px;
   width: fit-content;
-  box-shadow: 0 1px 6px rgba(13, 148, 136, 0.08);
+  box-shadow: 0 1px 4px rgba(13, 148, 136, 0.06);
+  box-sizing: border-box;
+}
+
+.welcome-speed-selector {
+  margin: 10px auto 14px;
 }
 
 .lesson-speed-selector {
   margin: 6px 0 12px;
-  padding: 4px 10px;
-  background: #f0fdf9;
-  border: 1px solid #cce5dc;
-  border-radius: 999px;
-  width: fit-content;
 }
 
 .speed-title {
-  font-size: 11.5px;
+  font-size: 12px;
   font-weight: 700;
   color: #115e59;
   display: flex;
   align-items: center;
   gap: 4px;
   white-space: nowrap;
+  user-select: none;
 }
 
+.guided-app .speed-pill-group,
+.portal .speed-pill-group,
 .speed-pill-group {
-  display: inline-flex;
-  background: #e2f4ef;
-  border-radius: 999px;
-  padding: 2px;
-  gap: 2px;
-  border: 1px solid #a7f3d0;
+  display: inline-flex !important;
+  align-items: center !important;
+  background: #e6f4f1 !important;
+  border: 1px solid #a7f3d0 !important;
+  border-radius: 999px !important;
+  padding: 3px !important;
+  gap: 3px !important;
+  box-shadow: inset 0 1px 2px rgba(13, 148, 136, 0.08) !important;
+  box-sizing: border-box !important;
 }
 
-.speed-pill-group.mini {
-  padding: 1.5px;
-  gap: 1.5px;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid #99f6e4;
-  box-shadow: 0 1px 4px rgba(13, 148, 136, 0.12);
-  margin-top: 3px;
-}
-
+.guided-app .speed-pill,
+.portal button.speed-pill,
+.portal .speed-pill,
 .speed-pill {
-  border: none;
-  background: transparent;
-  padding: 3px 9px;
-  font-size: 11px;
-  font-weight: 600;
-  color: #0d9488;
-  border-radius: 999px;
-  cursor: pointer;
-  transition: all 0.15s ease;
-  line-height: 1.25;
-  white-space: nowrap;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 68px !important;
+  min-width: 68px !important;
+  max-width: 68px !important;
+  height: 30px !important;
+  min-height: 30px !important;
+  max-height: 30px !important;
+  padding: 0 4px !important;
+  margin: 0 !important;
+  border: none !important;
+  outline: none !important;
+  border-radius: 999px !important;
+  font-family: inherit !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  line-height: 1 !important;
+  cursor: pointer !important;
+  transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  white-space: nowrap !important;
+  box-sizing: border-box !important;
+  -webkit-tap-highlight-color: transparent !important;
+  touch-action: manipulation !important;
+  background: transparent !important;
+  color: #0f766e !important;
+  box-shadow: none !important;
+  text-align: center !important;
+  flex: 0 0 68px !important;
 }
 
-.speed-pill-group.mini .speed-pill {
-  padding: 2px 7px;
-  font-size: 10.5px;
+.guided-app .speed-pill:hover:not(.active),
+.portal button.speed-pill:hover:not(.active),
+.portal .speed-pill:hover:not(.active),
+.speed-pill:hover:not(.active) {
+  background: rgba(13, 148, 136, 0.1) !important;
+  color: #042f2e !important;
 }
 
-.speed-pill:hover {
-  background: rgba(13, 148, 136, 0.12);
-  color: #042f2e;
-}
-
+.guided-app .speed-pill.active,
+.portal button.speed-pill.active,
+.portal .speed-pill.active,
 .speed-pill.active {
-  background: #0d9488 !important;
+  background: linear-gradient(135deg, #0d9488 0%, #0f766e 100%) !important;
   color: #ffffff !important;
-  font-weight: 700;
-  box-shadow: 0 1px 5px rgba(13, 148, 136, 0.35);
+  font-weight: 700 !important;
+  box-shadow: 0 2px 6px rgba(13, 148, 136, 0.28) !important;
+}
+
+@media (max-width: 650px) {
+  .nurse-speed-selector {
+    margin: 6px 0 10px;
+    padding: 3px 5px 3px 10px;
+    gap: 6px;
+  }
+  .speed-title {
+    font-size: 11px;
+  }
+  .guided-app .speed-pill,
+  .portal button.speed-pill,
+  .portal .speed-pill,
+  .speed-pill {
+    width: 60px !important;
+    min-width: 60px !important;
+    max-width: 60px !important;
+    flex: 0 0 60px !important;
+    height: 30px !important;
+    min-height: 30px !important;
+    max-height: 30px !important;
+    font-size: 11.5px !important;
+  }
 }
 
 .demo-nurse-details {
   display: flex;
   flex-direction: column;
   align-items: center;
-  pointer-events: auto;
-}
-
-.demo-nurse .speed-pill-group {
   pointer-events: auto;
 }
 

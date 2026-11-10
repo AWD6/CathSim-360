@@ -795,26 +795,8 @@ export default function Portal() {
         localStorage.setItem(adminLockStorageKey, JSON.stringify(attemptResult.state));
       } catch {}
 
-      // Attempt to obtain a real server session token from Google Apps Script
-      let realToken = 'local-admin-dmknj';
-      try {
-        const authRes = await request<{ ok: boolean; token?: string; confidentialLinks?: ConfidentialPatientLink[] }>({
-          action: 'adminLogin',
-          access: 'dmknj'
-        });
-        if (authRes && authRes.ok && authRes.token) {
-          realToken = authRes.token;
-          if (Array.isArray(authRes.confidentialLinks) && authRes.confidentialLinks.length > 0) {
-            const mapped: Record<string, ConfidentialPatientLink> = {};
-            authRes.confidentialLinks.forEach((l: ConfidentialPatientLink) => {
-              mapped[normalizeCsId(l.csId)] = l;
-            });
-            setConfidentialLinks((prev) => ({ ...prev, ...mapped }));
-          }
-        }
-      } catch {}
-
-      setAdminSession({ token: realToken, role: 'admin', code: 'ADMIN' });
+      // Set admin session & view immediately for instantaneous UI response
+      setAdminSession({ token: 'local-admin-dmknj', role: 'admin', code: 'ADMIN' });
       setSelectedCsId(targetCs);
       setReportCsInput(targetCs);
       setLinkCsIdInput(targetCs);
@@ -822,6 +804,25 @@ export default function Portal() {
       setAccess('');
       setView('report');
       setNotice(`เข้าสู่ระบบสำหรับ admin และเปิดดูข้อมูลของ ${targetCs} เรียบร้อยแล้วค่ะ`);
+
+      // Attempt to obtain a real server session token from Google Apps Script in background
+      request<{ ok: boolean; token?: string; confidentialLinks?: ConfidentialPatientLink[] }>({
+        action: 'adminLogin',
+        access: 'dmknj'
+      }, 3500)
+        .then((authRes) => {
+          if (authRes && authRes.ok && authRes.token) {
+            setAdminSession({ token: authRes.token, role: 'admin', code: 'ADMIN' });
+            if (Array.isArray(authRes.confidentialLinks) && authRes.confidentialLinks.length > 0) {
+              const mapped: Record<string, ConfidentialPatientLink> = {};
+              authRes.confidentialLinks.forEach((l: ConfidentialPatientLink) => {
+                mapped[normalizeCsId(l.csId)] = l;
+              });
+              setConfidentialLinks((prev) => ({ ...prev, ...mapped }));
+            }
+          }
+        })
+        .catch(() => {});
       return;
     }
 
@@ -1712,32 +1713,6 @@ export default function Portal() {
                       <NurseCath speaking={narrating} compact />
                       <div className="demo-nurse-details">
                         <span>{narrating ? 'พยาบาลน้องโฟร์กำลังพูด...' : 'พยาบาลน้องโฟร์'}</span>
-                        <div className="speed-pill-group mini" role="group" aria-label="ความเร็วเสียงพยาบาลน้องโฟร์">
-                          <button
-                            type="button"
-                            className={`speed-pill ${speechSpeed === 'slowest' ? 'active' : ''}`}
-                            onClick={() => setSpeechSpeed('slowest')}
-                            title="ช้ามาก (0.65x)"
-                          >
-                            ช้ามาก
-                          </button>
-                          <button
-                            type="button"
-                            className={`speed-pill ${speechSpeed === 'slow' ? 'active' : ''}`}
-                            onClick={() => setSpeechSpeed('slow')}
-                            title="ช้า (0.8x)"
-                          >
-                            ช้า
-                          </button>
-                          <button
-                            type="button"
-                            className={`speed-pill ${speechSpeed === 'normal' ? 'active' : ''}`}
-                            onClick={() => setSpeechSpeed('normal')}
-                            title="ปกติ (1.0x)"
-                          >
-                            ปกติ
-                          </button>
-                        </div>
                       </div>
                     </div>
 
