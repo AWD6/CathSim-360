@@ -64,8 +64,8 @@ function confidentialLinks_(a){
 function updatePatientSummary_(code){
   try{
     const book=book_();if(!book||!book.insertSheet)return;
-    const limits={hands:3,hygiene:4,position:4,tube:3,secure:3,drain:5,followup:3,water:3,trouble:3};
-    const totalSteps=31;
+    const limits={hands:3,hygiene:4,position:4,tube:3,secure:3,drain:5,followup:2,water:3,trouble:3};
+    const totalSteps=30;
     const evs=patientEvents_(code);
     const acc=rows_('Accounts').find(r=>r[0]===code);
     const uname=acc&&acc[5]?String(acc[5]):code;
