@@ -3,6 +3,8 @@ import { sources } from './curriculum';
 import {
   topics,
   getHygieneSteps,
+  getSecureSteps,
+  getCurriculumTopics,
   countdownTick,
   normalizeCsId,
   isValidCsId,
@@ -372,6 +374,8 @@ export default function Portal() {
   });
   const [showHandWashVideo, setShowHandWashVideo] = useState(false);
   const [activeHandVideoTab, setActiveHandVideoTab] = useState<'ddc' | 'siriraj'>('ddc');
+  const [handsViewMode, setHandsViewMode] = useState<'real-video' | '3d'>('real-video');
+  const [selectedMnemonicStep, setSelectedMnemonicStep] = useState<number>(0);
 
   useEffect(() => {
     try {
@@ -379,8 +383,14 @@ export default function Portal() {
     } catch {}
   }, [patientSex]);
 
-  const topic = topics[index];
-  const activeSteps = topic?.id === 'hygiene' ? getHygieneSteps(patientSex) : (topic?.steps ?? []);
+  const activeTopics = useMemo(() => getCurriculumTopics(patientSex), [patientSex]);
+  const topic = activeTopics[index] ?? activeTopics[0];
+  const activeSteps =
+    topic?.id === 'hygiene'
+      ? getHygieneSteps(patientSex)
+      : topic?.id === 'secure'
+      ? getSecureSteps(patientSex)
+      : (topic?.steps ?? []);
   const current = activeSteps[Math.min(step, Math.max(0, activeSteps.length - 1))] ?? activeSteps[0];
 
   // Only play voice clips after authenticated into Home or Lesson
@@ -1667,8 +1677,35 @@ export default function Portal() {
                   <p>เรียนรู้ครบทั้ง {topics.length} เรื่อง ดูภาพสาธิต 3 มิติ และกด “ทำแล้ว” เพื่อบันทึกการเรียนรู้ค่ะ</p>
                 </div>
 
+                {/* Patient Gender Selector Bar on Home Screen */}
+                <div className="home-gender-selector-card">
+                  <div className="home-gender-label">
+                    <span className="gender-badge-icon">🚻</span>
+                    <div>
+                      <strong>เลือกเพศของผู้ป่วย:</strong>
+                      <span>(ระบบจะปรับเนื้อหา ภาพสาธิต 3 มิติ และคำแนะนำแยกเฉพาะเพศชาย/หญิงโดยตรง)</span>
+                    </div>
+                  </div>
+                  <div className="gender-segmented-pill" role="group" aria-label="เลือกเพศผู้ป่วย">
+                    <button
+                      type="button"
+                      className={`gender-pill-btn ${patientSex === 'female' ? 'active' : ''}`}
+                      onClick={() => setPatientSex('female')}
+                    >
+                      👩 ผู้ป่วยเพศหญิง (เช็ดหน้าไปหลัง · แปะหน้าขา)
+                    </button>
+                    <button
+                      type="button"
+                      className={`gender-pill-btn ${patientSex === 'male' ? 'active' : ''}`}
+                      onClick={() => setPatientSex('male')}
+                    >
+                      👨 ผู้ป่วยเพศชาย (รูดเปิดเบาๆ · แปะหัวหน่าว/ท้องน้อย)
+                    </button>
+                  </div>
+                </div>
+
                 <div className="lesson-grid">
-                  {topics.map((t, i) => {
+                  {activeTopics.map((t, i) => {
                     const topicStat = currentPatientReport?.topicSummaries[i];
                     const completedCount = topicStat?.completedCount || 0;
                     return (
@@ -1715,21 +1752,128 @@ export default function Portal() {
                 </div>
 
                 <div className={`demo-layout ${mode === 'challenge' ? 'challenge-mode' : ''}`}>
-                  {/* 3D Interactive Demonstration Stage */}
+                  {/* Interactive Demonstration Stage */}
                   <div className="demonstration">
-                    <GuidedScene
-                      topic={topic.id}
-                      visual={current.visual}
-                      paused={paused}
-                      speaking={narrating}
-                      mode={mode}
-                      sex={patientSex}
-                      onSexChange={setPatientSex}
-                      onOpenHandVideo={() => setShowHandWashVideo(true)}
-                      onAction={(a) => {
-                        actions.current = [...actions.current, a].slice(-80);
-                      }}
-                    />
+                    {topic.id === 'hands' && (
+                      <div className="hands-demo-mode-bar">
+                        <div className="hands-demo-pill-group" role="group" aria-label="เลือกรูปแบบการแสดงผลล้างมือ">
+                          <button
+                            type="button"
+                            className={`hands-demo-pill ${handsViewMode === 'real-video' ? 'active' : ''}`}
+                            onClick={() => setHandsViewMode('real-video')}
+                          >
+                            🎥 คลิปคนจริงสาธิต 7 ขั้นตอน (แนะนำ · เห็นท่าจริงชัดเจน)
+                          </button>
+                          <button
+                            type="button"
+                            className={`hands-demo-pill ${handsViewMode === '3d' ? 'active' : ''}`}
+                            onClick={() => setHandsViewMode('3d')}
+                          >
+                            🧊 หุ่นจำลอง 3 มิติ
+                          </button>
+                        </div>
+                        {handsViewMode === 'real-video' && (
+                          <button
+                            type="button"
+                            className="hand-fullscreen-trigger-btn"
+                            onClick={() => setShowHandWashVideo(true)}
+                          >
+                            ⛶ ขยายเต็มจอ
+                          </button>
+                        )}
+                      </div>
+                    )}
+
+                    {topic.id === 'hands' && handsViewMode === 'real-video' ? (
+                      <div className="hand-real-person-stage">
+                        <div className="hand-wash-video-tabs inline-video-tabs">
+                          <button
+                            type="button"
+                            className={`video-tab-btn ${activeHandVideoTab === 'ddc' ? 'active' : ''}`}
+                            onClick={() => setActiveHandVideoTab('ddc')}
+                          >
+                            🏛️ กรมควบคุมโรค กระทรวงสาธารณสุข (คนจริงสาธิต)
+                          </button>
+                          <button
+                            type="button"
+                            className={`video-tab-btn ${activeHandVideoTab === 'siriraj' ? 'active' : ''}`}
+                            onClick={() => setActiveHandVideoTab('siriraj')}
+                          >
+                            🏥 คณะแพทยศาสตร์ศิริราชพยาบาล (คนจริงสาธิต)
+                          </button>
+                        </div>
+
+                        <div className="hand-inline-iframe-wrap">
+                          <iframe
+                            src={
+                              activeHandVideoTab === 'ddc'
+                                ? 'https://www.youtube-nocookie.com/embed/D5af_nAfEhY?rel=0&modestbranding=1'
+                                : 'https://www.youtube-nocookie.com/embed/leHVk7bEhVg?rel=0&modestbranding=1'
+                            }
+                            title="วิดีโอคนจริงสาธิตการล้างมือ 7 ขั้นตอน"
+                            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                            allowFullScreen
+                          />
+                        </div>
+
+                        {/* Interactive 7 Mnemonic Buttons under Video */}
+                        <div className="hand-inline-nav-strip">
+                          <div className="hand-inline-strip-title">
+                            📌 <b>สูตรจำ 7 ท่าล้างมือคนจริง:</b> คลิกดูท่าปฏิบัติจริงตามลำดับ
+                          </div>
+                          <div className="hand-inline-7pills">
+                            {[
+                              { num: 1, name: 'หน้า', desc: 'ฝ่ามือถูกัน: ฟอกสบู่และถูฝ่ามือทั้งสองข้างเข้าหากัน' },
+                              { num: 2, name: 'หลัง', desc: 'ฝ่ามือถูหลังมือและซอกนิ้ว: วางฝ่ามือบนหลังมืออีกข้างและประสานนิ้วถูสลับกัน' },
+                              { num: 3, name: 'กลาง', desc: 'ฝ่ามือถูฝ่ามือและนิ้วประสานซอกนิ้ว: ประกบฝ่ามือและประสานซอกนิ้วด้านใน' },
+                              { num: 4, name: 'ปั้น', desc: 'หลังนิ้วมือถูฝ่ามือ (กำปั้น): งอนิ้วมือทั้งสองข้างเกาะขัดถูฝ่ามือตรงข้าม' },
+                              { num: 5, name: 'โป้ง', desc: 'ถูนิ้วหัวแม่มือโดยรอบด้วยฝ่ามือ: กำมือรอบนิ้วหัวแม่มือแล้วหมุนวนสลับทั้งสองข้าง' },
+                              { num: 6, name: 'ปลาย', desc: 'ปลายนิ้วมือถูขวางฝ่ามือ: จีบปลายนิ้วมือหมุนวนขัดขวางบนฝ่ามือเพื่อล้างซอกเล็บ' },
+                              { num: 7, name: 'ข้อ', desc: 'ถูรอบข้อมือทั้งสองข้าง: กำมือรอบข้อมือแล้วหมุนถูวนรอบข้อมือทั้งสองข้าง' }
+                            ].map((m, idx) => (
+                              <button
+                                key={m.num}
+                                type="button"
+                                className={`hand-7pill-btn ${selectedMnemonicStep === idx ? 'active' : ''}`}
+                                onClick={() => setSelectedMnemonicStep(idx)}
+                              >
+                                <span className="hand-7pill-num">{m.num}</span>
+                                <span>{m.name}</span>
+                              </button>
+                            ))}
+                          </div>
+                          <div className="hand-selected-step-desc">
+                            <span>
+                              <b>ท่าที่ {selectedMnemonicStep + 1} ({['หน้า', 'หลัง', 'กลาง', 'ปั้น', 'โป้ง', 'ปลาย', 'ข้อ'][selectedMnemonicStep]}):</b>{' '}
+                              {[
+                                'ฝ่ามือถูกัน — ฟอกสบู่ให้ทั่วและถูฝ่ามือทั้งสองข้างเข้าหากัน',
+                                'ฝ่ามือถูหลังมือและซอกนิ้ว — ถูหลังมือและซอกนิ้วมือทั้งสองข้าง',
+                                'ฝ่ามือถูฝ่ามือและนิ้วประสานซอกนิ้ว — ขัดถูซอกนิ้วด้านในให้สะอาด',
+                                'หลังนิ้วมือถูฝ่ามือ (กำปั้น) — กำมือและถูหลังนิ้วเข้ากับฝ่ามือ',
+                                'ถูนิ้วหัวแม่มือโดยรอบ — กำมือรอบนิ้วโป้งแล้วหมุนถูโดยรอบทั้งสองข้าง',
+                                'ปลายนิ้วมือถูขวางฝ่ามือ — ขัดทำความสะอาดซอกเล็บและปลายนิ้วมือ',
+                                'ถูรอบข้อมือทั้งสองข้าง — ถูวนรอบข้อมือทั้งสองข้างแล้วล้างน้ำสะอาด'
+                              ][selectedMnemonicStep]}
+                            </span>
+                            <small>* ถูแต่ละท่า 15–20 วินาที</small>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <GuidedScene
+                        topic={topic.id}
+                        visual={current.visual}
+                        paused={paused}
+                        speaking={narrating}
+                        mode={mode}
+                        sex={patientSex}
+                        onSexChange={setPatientSex}
+                        onOpenHandVideo={() => setShowHandWashVideo(true)}
+                        onAction={(a) => {
+                          actions.current = [...actions.current, a].slice(-80);
+                        }}
+                      />
+                    )}
                     <div className="demo-nurse">
                       <NurseCath speaking={narrating} compact />
                       <div className="demo-nurse-details">
@@ -1801,7 +1945,7 @@ export default function Portal() {
                       {(topic.id === 'hygiene' || topic.id === 'secure') && (
                         <div className="gender-selector-bar">
                           <span className="gender-bar-label">
-                            {topic.id === 'hygiene' ? 'เลือกแนวทางตามเพศ:' : 'เลือกตำแหน่งยึดสายตามเพศ:'}
+                            {topic.id === 'hygiene' ? 'เลือกคำแนะนำเฉพาะเพศ:' : 'เลือกตำแหน่งยึดสายเฉพาะเพศ:'}
                           </span>
                           <div className="gender-segmented-pill" role="group" aria-label="เลือกเพศผู้ป่วย">
                             <button
@@ -1824,7 +1968,7 @@ export default function Portal() {
                                 setReady(false);
                               }}
                             >
-                              👨 เพศชาย {topic.id === 'secure' ? '(แปะหัวหน่าว/ท้องน้อย)' : '(เปิดเบาๆ/ฟอกสบู่อ่อน)'}
+                              👨 เพศชาย {topic.id === 'secure' ? '(แปะหัวหน่าว/ท้องน้อย)' : '(รูดเปิดเบาๆ/ฟอกสบู่อ่อน)'}
                             </button>
                           </div>
                         </div>
@@ -1836,10 +1980,13 @@ export default function Portal() {
                           <button
                             type="button"
                             className="hand-video-modal-btn"
-                            onClick={() => setShowHandWashVideo(true)}
+                            onClick={() => {
+                              setHandsViewMode('real-video');
+                              setShowHandWashVideo(true);
+                            }}
                           >
                             <span style={{ fontSize: '18px' }}>🧼🎬</span>
-                            <span>ชมคลิปวิดีโอสาธิตการล้างมือ 7 ขั้นตอน (กรมควบคุมโรค / ศิริราช)</span>
+                            <span>ชมคลิปวิดีโอคนจริงสาธิตการล้างมือ 7 ขั้นตอน (กรมควบคุมโรค / ศิริราช)</span>
                           </button>
                         </div>
                       )}
