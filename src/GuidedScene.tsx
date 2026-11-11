@@ -899,6 +899,7 @@ export default function GuidedScene({
   const [tubeIssue, setTubeIssue] = useState<'normal' | 'kink' | 'dependentLoop'>('normal');
   const [phase, setPhase] = useState(0);
   const [internalSex, setInternalSex] = useState<'female' | 'male'>('female');
+  const [secureDemoPos, setSecureDemoPos] = useState<'thigh' | 'suprapubic'>('thigh');
   const [troubleDemo, setTroubleDemo] = useState<'kink' | 'belly' | 'leak' | 'flank' | 'blood' | 'fever'>('kink');
   const [feedback, setFeedback] = useState('');
   const [drag, setDrag] = useState(false);
@@ -1083,7 +1084,7 @@ export default function GuidedScene({
       bagInlet
     ];
   } else if (topic === 'secure' && tape > 0) {
-    if (sex === 'male') {
+    if (secureDemoPos === 'suprapubic') {
       // เพศชาย: ยึดสายบริเวณหัวหน่าวหรือท้องน้อย (Suprapubic area)
       catheterPoints = [
         insertionPoint,
@@ -1152,7 +1153,7 @@ export default function GuidedScene({
                     setSlackTight((s) => !s);
                     record(slackTight ? 'จัดสายหย่อนพอดี ไม่ตึงรั้ง' : 'จำลองสายตึงรั้งเกินไป');
                   }}
-                  activeSex={sex}
+                  activeSex={topic === 'secure' ? (secureDemoPos === 'suprapubic' ? 'male' : 'female') : sex}
                   isSecureTopic={topic === 'secure'}
                 />
 
@@ -1476,8 +1477,8 @@ export default function GuidedScene({
         {topic === 'hygiene' && (
           <div className="bag-waist-badge badge-safe">
             {sex === 'female'
-              ? '👩 แนะนำเฉพาะเพศหญิง: เช็ดทิศทางเดียวจากหน้าไปหลัง (ห้ามเช็ดถูย้อนไปมาเด็ดขาด)'
-              : '👨 แนะนำเฉพาะเพศชาย: รูดเปิดหนังหุ้มปลายเบา ๆ ฟอกสบู่อ่อน ซับแห้ง และรูดกลับทันที'}
+              ? 'แนะนำเฉพาะเพศหญิง: เช็ดทิศทางเดียวจากหน้าไปหลัง (ห้ามเช็ดถูย้อนไปมาเด็ดขาด)'
+              : 'แนะนำเฉพาะเพศชาย: รูดเปิดหนังหุ้มปลายเบา ๆ ฟอกสบู่อ่อน ซับแห้ง และรูดกลับทันที'}
           </div>
         )}
 
@@ -1488,24 +1489,24 @@ export default function GuidedScene({
             }`}
           >
             {tubeIssue === 'dependentLoop'
-              ? '⚠️ สายคล้อยห้อยท้องช้าง (Dependent loop): น้ำปัสสาวะขังคั่งค้าง เสี่ยงแบคทีเรียไหลย้อนกลับ (Reflux) สู่กระเพาะปัสสาวะ (หลักฐาน CDC & SHEA)'
+              ? 'สายคล้อยห้อยท้องช้าง (Dependent loop): น้ำปัสสาวะขังคั่งค้าง เสี่ยงแบคทีเรียไหลย้อนกลับ (Reflux) สู่กระเพาะปัสสาวะ (หลักฐาน CDC & SHEA)'
               : !straight
-              ? '⚠️ สายพับงอหรือถูกนอนทับ: น้ำปัสสาวะไม่ไหลลงถุง ให้คลายจุดพับและยกสายพาดบนหน้าขา'
-              : '✅ สายพาดบนขาและลาดเทตรงสู่ถุง: น้ำปัสสาวะไหลสะดวกตามแรงโน้มถ่วง'}
+              ? 'สายพับงอหรือถูกนอนทับ: น้ำปัสสาวะไม่ไหลลงถุง ให้คลายจุดพับและยกสายพาดบนหน้าขา'
+              : 'สายพาดบนขาและลาดเทตรงสู่ถุง: น้ำปัสสาวะไหลสะดวกตามแรงโน้มถ่วง'}
           </div>
         )}
 
         {topic === 'secure' && (
           <div className="bag-waist-badge badge-safe">
-            {sex === 'female'
-              ? '👩 ผู้ป่วยเพศหญิง: แปะเทปยึดสายที่หน้าขา (Anterior thigh) เหลือระยะหย่อนพอดี ไม่ดึงรั้ง'
-              : '👨 ผู้ป่วยเพศชาย: แปะเทปยึดสายบริเวณหัวหน่าวหรือท้องน้อย (ลดแรงดึงรั้งที่มุม Penoscrotal junction)'}
+            {secureDemoPos === 'suprapubic'
+              ? 'เพศชาย: แปะเทปยึดสายบริเวณหัวหน่าวหรือท้องน้อย (ลดแรงดึงรั้งที่มุม Penoscrotal junction)'
+              : 'เพศหญิง: แปะเทปยึดสายที่หน้าขา (Anterior thigh) เหลือระยะหย่อนพอดี ไม่ดึงรั้ง'}
           </div>
         )}
 
         {topic === 'followup' && (
           <div className="bag-waist-badge badge-safe">
-            🔒 คงสภาพระบบปิด (Closed System): เปลี่ยนสายเมื่อชำรุด หลุด รั่ว หรือมีตะกอนค้าง · ห้ามเปลี่ยนเองหรือปลดข้อต่อ
+            คงสภาพระบบปิด (Closed System): เปลี่ยนสายเมื่อชำรุด หลุด รั่ว หรือมีตะกอนค้าง · ห้ามเปลี่ยนเองหรือปลดข้อต่อ
           </div>
         )}
 
@@ -1630,7 +1631,7 @@ export default function GuidedScene({
                     gap: '6px'
                   }}
                 >
-                  🎬 ชมคลิปวิดีโอสาธิตการล้างมือ 7 ขั้นตอนของจริง (กรมควบคุมโรค / ศิริราช)
+                  ชมคลิปวิดีโอสาธิตการล้างมือ 7 ขั้นตอนของจริง (ศิริราช)
                 </button>
               </div>
             )}
@@ -1703,28 +1704,28 @@ export default function GuidedScene({
           <>
             <div className="control-row">
               <button
-                className={sex === 'female' ? 'selected' : ''}
+                className={secureDemoPos === 'thigh' ? 'selected' : ''}
                 onClick={() => {
-                  handleSexChange('female');
+                  setSecureDemoPos('thigh');
                   setTape(1);
-                  record('เลือกเพศหญิง: แปะเทปที่หน้าขา');
+                  record('เลือกตำแหน่งยึดสาย: แปะที่หน้าขา (สำหรับเพศหญิง)');
                 }}
               >
-                👩 เพศหญิง (แปะหน้าขา)
+                ตำแหน่งที่ 1: แปะหน้าขา (สำหรับเพศหญิง)
               </button>
               <button
-                className={sex === 'male' ? 'selected' : ''}
+                className={secureDemoPos === 'suprapubic' ? 'selected' : ''}
                 onClick={() => {
-                  handleSexChange('male');
+                  setSecureDemoPos('suprapubic');
                   setTape(1);
-                  record('เลือกเพศชาย: แปะเทปบริเวณหัวหน่าวหรือท้องน้อย');
+                  record('เลือกตำแหน่งยึดสาย: แปะบริเวณหัวหน่าวหรือท้องน้อย (สำหรับเพศชาย)');
                 }}
               >
-                👨 เพศชาย (แปะหัวหน่าว/ท้องน้อย)
+                ตำแหน่งที่ 2: แปะหัวหน่าวหรือท้องน้อย (สำหรับเพศชาย)
               </button>
             </div>
             <div className="control-row">
-              {sex === 'female' ? (
+              {secureDemoPos === 'thigh' ? (
                 <>
                   <button className={tape === 1 ? 'selected' : ''} onClick={() => chooseTape(1)}>
                     แปะเทปที่หน้าขาขวา
@@ -1758,9 +1759,9 @@ export default function GuidedScene({
             </div>
             {hint && (
               <p>
-                {sex === 'female'
-                  ? 'เพศหญิง: แปะเทปยึดสายที่หน้าขาข้างใดข้างหนึ่ง เหลือระยะหย่อนพอดี ไม่ดึงรั้ง'
-                  : 'เพศชาย: แปะเทปยึดสายที่บริเวณหัวหน่าวหรือท้องน้อย เพื่อป้องกันแรงดึงรั้งที่มุม Penoscrotal junction'}
+                {secureDemoPos === 'thigh'
+                  ? 'เพศหญิง: แนะนำแปะเทปยึดสายที่บริเวณหน้าขา (Anterior thigh) โดยเหลือระยะหย่อนพอดี ไม่ดึงรั้ง'
+                  : 'เพศชาย: แนะนำแปะเทปยึดสายบริเวณหัวหน่าวหรือท้องน้อย เพื่อลดแรงดึงรั้งที่มุม Penoscrotal junction ป้องกันแผลกดทับ'}
               </p>
             )}
           </>
@@ -1777,7 +1778,7 @@ export default function GuidedScene({
                   record('จัดสายให้พาดบนขาและลาดเทตรงลงสู่ถุงอย่างถูกต้อง');
                 }}
               >
-                ✅ 1. สายพาดบนขา ลาดเทตรง (ถูกต้อง)
+                1. สายพาดบนขา ลาดเทตรง (ถูกต้อง)
               </button>
               <button
                 className={!straight || tubeIssue === 'kink' ? 'selected' : ''}
@@ -1787,7 +1788,7 @@ export default function GuidedScene({
                   record('จำลองสถานการณ์สายพับงอหรือถูกนอนทับ');
                 }}
               >
-                ⚠️ 2. จำลองสายพับงอ / ถูกนอนทับ
+                2. จำลองสายพับงอ / ถูกนอนทับ
               </button>
               <button
                 className={tubeIssue === 'dependentLoop' ? 'selected' : ''}
@@ -1797,7 +1798,7 @@ export default function GuidedScene({
                   record('จำลองสายคล้อยห้อยท้องช้าง (Dependent loop)');
                 }}
               >
-                ⚠️ 3. จำลองสายคล้อยห้อยท้องช้าง (เสี่ยงติดเชื้อ)
+                3. จำลองสายคล้อยห้อยท้องช้าง (เสี่ยงติดเชื้อ)
               </button>
             </div>
             {hint && (
@@ -1892,14 +1893,14 @@ export default function GuidedScene({
                   record('ตรวจใบนัดหมายเปลี่ยนสายที่สถานพยาบาล');
                 }}
               >
-                🗓️ 1. ตรวจใบนัดสถานพยาบาล
+                1. ตรวจใบนัดสถานพยาบาล
               </button>
               <button
                 onClick={() => {
                   record('ข้อบ่งชี้เปลี่ยนสาย: ชำรุด หลุด รั่ว หรือมีตะกอนค้างปัสสาวะไม่ลงถุง');
                 }}
               >
-                ⚠️ 2. เปลี่ยนเมื่อ: ชำรุด / หลุด / รั่ว / มีตะกอนค้าง
+                2. เปลี่ยนเมื่อ: ชำรุด / หลุด / รั่ว / มีตะกอนค้าง
               </button>
               <button
                 className="selected"
@@ -1907,7 +1908,7 @@ export default function GuidedScene({
                   record('เน้นย้ำ: ไม่แนะนำให้เปลี่ยนเองหรือปลดข้อต่อ เพื่อคงสภาพระบบปิด ป้องกันการติดเชื้อ');
                 }}
               >
-                🔒 3. คงระบบปิด (ห้ามเปลี่ยนเองหรือปลดข้อต่อ)
+                3. คงระบบปิด (ห้ามเปลี่ยนเองหรือปลดข้อต่อ)
               </button>
             </div>
             {hint && (
@@ -1930,7 +1931,7 @@ export default function GuidedScene({
                   record('เลือกคำแนะนำเพศหญิง: เช็ดหน้าไปหลังทิศทางเดียว');
                 }}
               >
-                👩 คำแนะนำเฉพาะเพศหญิง (เช็ดหน้าไปหลัง)
+                คำแนะนำเฉพาะเพศหญิง (เช็ดหน้าไปหลัง)
               </button>
               <button
                 className={sex === 'male' ? 'selected' : ''}
@@ -1941,7 +1942,7 @@ export default function GuidedScene({
                   record('เลือกคำแนะนำเพศชาย: รูดเปิดเบา ๆ ล้างสบู่อ่อน');
                 }}
               >
-                👨 คำแนะนำเฉพาะเพศชาย (รูดเปิดเบา ๆ ล้างสบู่อ่อน)
+                คำแนะนำเฉพาะเพศชาย (รูดเปิดเบา ๆ ล้างสบู่อ่อน)
               </button>
             </div>
             <div className="control-row">

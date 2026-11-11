@@ -956,7 +956,7 @@ export default function Portal() {
 
       if (remoteSynced) {
         setNotice(
-          `✓ บันทึกเชื่อมโยงรหัส ${csId} (HN: ${hn}, ${fullName}) เข้ากับ Google Sheet แท็บ CS_HN_Directory สำเร็จเรียบร้อยแล้วค่ะ`
+          `บันทึกเชื่อมโยงรหัส ${csId} (HN: ${hn}, ${fullName}) เข้ากับ Google Sheet แท็บ CS_HN_Directory สำเร็จเรียบร้อยแล้วค่ะ`
         );
       } else {
         setNotice(
@@ -1677,35 +1677,8 @@ export default function Portal() {
                   <p>เรียนรู้ครบทั้ง {topics.length} เรื่อง ดูภาพสาธิต 3 มิติ และกด “ทำแล้ว” เพื่อบันทึกการเรียนรู้ค่ะ</p>
                 </div>
 
-                {/* Patient Gender Selector Bar on Home Screen */}
-                <div className="home-gender-selector-card">
-                  <div className="home-gender-label">
-                    <span className="gender-badge-icon">🚻</span>
-                    <div>
-                      <strong>เลือกเพศของผู้ป่วย:</strong>
-                      <span>(ระบบจะปรับเนื้อหา ภาพสาธิต 3 มิติ และคำแนะนำแยกเฉพาะเพศชาย/หญิงโดยตรง)</span>
-                    </div>
-                  </div>
-                  <div className="gender-segmented-pill" role="group" aria-label="เลือกเพศผู้ป่วย">
-                    <button
-                      type="button"
-                      className={`gender-pill-btn ${patientSex === 'female' ? 'active' : ''}`}
-                      onClick={() => setPatientSex('female')}
-                    >
-                      👩 ผู้ป่วยเพศหญิง (เช็ดหน้าไปหลัง · แปะหน้าขา)
-                    </button>
-                    <button
-                      type="button"
-                      className={`gender-pill-btn ${patientSex === 'male' ? 'active' : ''}`}
-                      onClick={() => setPatientSex('male')}
-                    >
-                      👨 ผู้ป่วยเพศชาย (รูดเปิดเบาๆ · แปะหัวหน่าว/ท้องน้อย)
-                    </button>
-                  </div>
-                </div>
-
                 <div className="lesson-grid">
-                  {activeTopics.map((t, i) => {
+                  {topics.map((t, i) => {
                     const topicStat = currentPatientReport?.topicSummaries[i];
                     const completedCount = topicStat?.completedCount || 0;
                     return (
@@ -1762,14 +1735,14 @@ export default function Portal() {
                             className={`hands-demo-pill ${handsViewMode === 'real-video' ? 'active' : ''}`}
                             onClick={() => setHandsViewMode('real-video')}
                           >
-                            🎥 คลิปคนจริงสาธิต 7 ขั้นตอน (แนะนำ · เห็นท่าจริงชัดเจน)
+                            คลิปคนจริงสาธิต 7 ขั้นตอน (แนะนำ · เห็นท่าจริงชัดเจน)
                           </button>
                           <button
                             type="button"
                             className={`hands-demo-pill ${handsViewMode === '3d' ? 'active' : ''}`}
                             onClick={() => setHandsViewMode('3d')}
                           >
-                            🧊 หุ่นจำลอง 3 มิติ
+                            หุ่นจำลอง 3 มิติ
                           </button>
                         </div>
                         {handsViewMode === 'real-video' && (
@@ -1778,7 +1751,7 @@ export default function Portal() {
                             className="hand-fullscreen-trigger-btn"
                             onClick={() => setShowHandWashVideo(true)}
                           >
-                            ⛶ ขยายเต็มจอ
+                            ขยายเต็มจอ
                           </button>
                         )}
                       </div>
@@ -1787,30 +1760,15 @@ export default function Portal() {
                     {topic.id === 'hands' && handsViewMode === 'real-video' ? (
                       <div className="hand-real-person-stage">
                         <div className="hand-wash-video-tabs inline-video-tabs">
-                          <button
-                            type="button"
-                            className={`video-tab-btn ${activeHandVideoTab === 'ddc' ? 'active' : ''}`}
-                            onClick={() => setActiveHandVideoTab('ddc')}
-                          >
-                            🏛️ กรมควบคุมโรค กระทรวงสาธารณสุข (คนจริงสาธิต)
-                          </button>
-                          <button
-                            type="button"
-                            className={`video-tab-btn ${activeHandVideoTab === 'siriraj' ? 'active' : ''}`}
-                            onClick={() => setActiveHandVideoTab('siriraj')}
-                          >
-                            🏥 คณะแพทยศาสตร์ศิริราชพยาบาล (คนจริงสาธิต)
-                          </button>
+                          <span className="video-tab-btn active" style={{ cursor: 'default' }}>
+                            วิดีโอสาธิตการล้างมือ 7 ขั้นตอน (คณะแพทยศาสตร์ศิริราชพยาบาล)
+                          </span>
                         </div>
 
                         <div className="hand-inline-iframe-wrap">
                           <iframe
-                            src={
-                              activeHandVideoTab === 'ddc'
-                                ? 'https://www.youtube-nocookie.com/embed/D5af_nAfEhY?rel=0&modestbranding=1'
-                                : 'https://www.youtube-nocookie.com/embed/leHVk7bEhVg?rel=0&modestbranding=1'
-                            }
-                            title="วิดีโอคนจริงสาธิตการล้างมือ 7 ขั้นตอน"
+                            src="https://www.youtube-nocookie.com/embed/leHVk7bEhVg?rel=0&modestbranding=1"
+                            title="วิดีโอคนจริงสาธิตการล้างมือ 7 ขั้นตอน คณะแพทยศาสตร์ศิริราชพยาบาล"
                             allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                             allowFullScreen
                           />
@@ -1819,7 +1777,7 @@ export default function Portal() {
                         {/* Interactive 7 Mnemonic Buttons under Video */}
                         <div className="hand-inline-nav-strip">
                           <div className="hand-inline-strip-title">
-                            📌 <b>สูตรจำ 7 ท่าล้างมือคนจริง:</b> คลิกดูท่าปฏิบัติจริงตามลำดับ
+                            <b>สูตรจำ 7 ท่าล้างมือคนจริง:</b> คลิกดูท่าปฏิบัติจริงตามลำดับ
                           </div>
                           <div className="hand-inline-7pills">
                             {[
@@ -1941,11 +1899,11 @@ export default function Portal() {
                   {/* Spoken Step Text Panel (Shown in CathLearn and CathPractice modes) */}
                   {mode !== 'challenge' && (
                     <div className="spoken-step">
-                      {/* Gender Selector Bar for hygiene (ทำความสะอาดอวัยวะสืบพันธุ์) and secure (ยึดสายไม่ให้ดึงรั้ง) */}
-                      {(topic.id === 'hygiene' || topic.id === 'secure') && (
+                      {/* Gender Selector Bar ONLY for hygiene (ทำความสะอาดอวัยวะสืบพันธุ์) */}
+                      {topic.id === 'hygiene' && (
                         <div className="gender-selector-bar">
                           <span className="gender-bar-label">
-                            {topic.id === 'hygiene' ? 'เลือกคำแนะนำเฉพาะเพศ:' : 'เลือกตำแหน่งยึดสายเฉพาะเพศ:'}
+                            เลือกคำแนะนำเฉพาะเพศ:
                           </span>
                           <div className="gender-segmented-pill" role="group" aria-label="เลือกเพศผู้ป่วย">
                             <button
@@ -1957,7 +1915,7 @@ export default function Portal() {
                                 setReady(false);
                               }}
                             >
-                              👩 เพศหญิง {topic.id === 'secure' ? '(แปะหน้าขา)' : '(เช็ดหน้าไปหลัง)'}
+                              เพศหญิง (เช็ดหน้าไปหลัง)
                             </button>
                             <button
                               type="button"
@@ -1968,7 +1926,7 @@ export default function Portal() {
                                 setReady(false);
                               }}
                             >
-                              👨 เพศชาย {topic.id === 'secure' ? '(แปะหัวหน่าว/ท้องน้อย)' : '(รูดเปิดเบาๆ/ฟอกสบู่อ่อน)'}
+                              เพศชาย (รูดเปิดเบาๆ/ฟอกสบู่อ่อน)
                             </button>
                           </div>
                         </div>
@@ -1985,8 +1943,7 @@ export default function Portal() {
                               setShowHandWashVideo(true);
                             }}
                           >
-                            <span style={{ fontSize: '18px' }}>🧼🎬</span>
-                            <span>ชมคลิปวิดีโอคนจริงสาธิตการล้างมือ 7 ขั้นตอน (กรมควบคุมโรค / ศิริราช)</span>
+                            <span>ชมคลิปวิดีโอคนจริงสาธิตการล้างมือ 7 ขั้นตอน (ศิริราช)</span>
                           </button>
                         </div>
                       )}
@@ -2161,21 +2118,20 @@ export default function Portal() {
                     <div className="admin-dash-header">
                       <div className="admin-dash-title-group">
                         <div className="admin-badge-row">
-                          <span className="admin-shield-badge">🛡️ ผู้ดูแลระบบ (Admin Only)</span>
-                          <span className="live-sync-pill">🟢 เชื่อมต่อ Google Sheet แบบสด (Live)</span>
+                          <span className="admin-shield-badge">ผู้ดูแลระบบ (Admin Only)</span>
+                          <span className="live-sync-pill">เชื่อมต่อ Google Sheet แบบสด (Live)</span>
                         </div>
                         <h1>CathReport · Dashboard ผู้ดูแลระบบ</h1>
                         <p>
                           ศูนย์วิเคราะห์ข้อมูลผลการประเมินทักษะการดูแลสายสวนปัสสาวะรายบุคคลด้วยรหัส <strong>CS ID</strong> (เกณฑ์ผ่าน ≥ 80%) และเชื่อมโยงข้อมูลความลับทางการแพทย์ (HN / ชื่อ - นามสกุล) เก็บไว้ที่ Google Sheet
                         </p>
                       </div>
-                      <button className="admin-logout-btn" onClick={logoutAll}>🚪 ออกจากระบบ Admin</button>
+                      <button className="admin-logout-btn" onClick={logoutAll}>ออกจากระบบ Admin</button>
                     </div>
 
                     {/* Symmetrical 4-Card KPI Overview Dashboard Tiles */}
                     <div className="admin-kpi-grid">
                       <div className="kpi-card">
-                        <div className="kpi-icon">👥</div>
                         <div className="kpi-content">
                           <span className="kpi-label">ผู้ป่วยทั้งหมดในระบบ</span>
                           <b className="kpi-value">{allPatientReports.length} <small>ราย</small></b>
@@ -2183,7 +2139,6 @@ export default function Portal() {
                         </div>
                       </div>
                       <div className="kpi-card highlight-pass">
-                        <div className="kpi-icon">🏆</div>
                         <div className="kpi-content">
                           <span className="kpi-label">ผ่านเกณฑ์มาตรฐาน (≥ 80%)</span>
                           <b className="kpi-value">
@@ -2197,7 +2152,6 @@ export default function Portal() {
                         </div>
                       </div>
                       <div className="kpi-card">
-                        <div className="kpi-icon">✅</div>
                         <div className="kpi-content">
                           <span className="kpi-label">ขั้นตอนปฏิบัติที่บันทึก</span>
                           <b className="kpi-value">
@@ -2207,7 +2161,6 @@ export default function Portal() {
                         </div>
                       </div>
                       <div className="kpi-card">
-                        <div className="kpi-icon">🔒</div>
                         <div className="kpi-content">
                           <span className="kpi-label">เชื่อมโยงข้อมูลความลับ</span>
                           <b className="kpi-value">
@@ -2222,7 +2175,7 @@ export default function Portal() {
                     <div className="admin-confidential-link-card">
                       <div className="confidential-header">
                         <div className="confidential-badge-wrap">
-                          <span className="confidential-badge">🔒 ข้อมูลความลับเฉพาะ Admin · จัดเก็บลง Google Sheet · ห้ามเผยแพร่</span>
+                          <span className="confidential-badge">ข้อมูลความลับเฉพาะ Admin · จัดเก็บลง Google Sheet · ห้ามเผยแพร่</span>
                         </div>
                         <h3>ช่องเชื่อมต่อข้อมูลผู้ป่วยรายบุคคล (CS ID ↔ HN และ ชื่อ - นามสกุล)</h3>
                         <p>
@@ -2234,7 +2187,7 @@ export default function Portal() {
                         <div className="confidential-inputs-grid">
                           <div className="confidential-field">
                             <label htmlFor="admin-csid-input">
-                              <span className="field-title">🆔 รหัส CS ID</span>
+                              <span className="field-title">รหัส CS ID</span>
                             </label>
                             <input
                               id="admin-csid-input"
@@ -2247,7 +2200,7 @@ export default function Portal() {
                           </div>
                           <div className="confidential-field">
                             <label htmlFor="admin-hn-input">
-                              <span className="field-title">🏥 หมายเลข HN (รพ.)</span>
+                              <span className="field-title">หมายเลข HN (รพ.)</span>
                             </label>
                             <input
                               id="admin-hn-input"
@@ -2260,7 +2213,7 @@ export default function Portal() {
                           </div>
                           <div className="confidential-field">
                             <label htmlFor="admin-name-input">
-                              <span className="field-title">👤 ชื่อ - นามสกุล</span>
+                              <span className="field-title">ชื่อ - นามสกุล</span>
                             </label>
                             <input
                               id="admin-name-input"
@@ -2280,7 +2233,7 @@ export default function Portal() {
                             disabled={linkBusy || !linkCsIdInput.trim() || !linkHnInput.trim() || !linkFullNameInput.trim()}
                             onClick={saveConfidentialLink}
                           >
-                            {linkBusy ? '⏳ กำลังบันทึกลง Google Sheet…' : '💾 บันทึกเชื่อมข้อมูลไว้ที่ Google Sheet (CS_HN_Directory)'}
+                            {linkBusy ? 'กำลังบันทึกลง Google Sheet…' : 'บันทึกเชื่อมข้อมูลไว้ที่ Google Sheet (CS_HN_Directory)'}
                           </button>
                           {confidentialLinks[normalizeCsId(linkCsIdInput)] && (
                             <span className="confidential-linked-pill">
@@ -2295,7 +2248,7 @@ export default function Portal() {
                     <div className="patient-directory-card">
                       <div className="directory-card-header">
                         <div className="directory-title-wrap">
-                          <span className="directory-badge">📋 ชีทแยกรายชื่อและข้อมูลเชื่อมโยง</span>
+                          <span className="directory-badge">ชีทแยกรายชื่อและข้อมูลเชื่อมโยง</span>
                           <h3>ชีทข้อมูลผู้ป่วย CS ID ↔ HN และ ชื่อ - นามสกุล</h3>
                           <p>
                             ค้นหาและตรวจสอบการผูกรหัส <strong>CS ID</strong> เข้ากับ <strong>HN</strong> และ{' '}
@@ -2314,7 +2267,6 @@ export default function Portal() {
 
                       <div className="directory-search-bar">
                         <div className="search-input-wrap">
-                          <span className="search-icon">🔍</span>
                           <input
                             type="text"
                             value={directorySearch}
@@ -2376,7 +2328,7 @@ export default function Portal() {
                                           setNotice(`คัดลอกรหัส ${item.csId} เรียบร้อยแล้วค่ะ`);
                                         }}
                                       >
-                                        📋
+                                        คัดลอก
                                       </button>
                                     </span>
                                   </td>
@@ -2416,7 +2368,7 @@ export default function Portal() {
                                         }}
                                         title="แก้ไขหรือผูกข้อมูลคนไข้รายนี้"
                                       >
-                                        ✏️ ผูกข้อมูล
+                                        ผูกข้อมูล
                                       </button>
                                       <button
                                         type="button"
@@ -2429,7 +2381,7 @@ export default function Portal() {
                                         }}
                                         title="ดูรายงานผลการเรียนรู้"
                                       >
-                                        📊 ดูผล
+                                        ดูผล
                                       </button>
                                     </div>
                                   </td>
@@ -2468,7 +2420,7 @@ export default function Portal() {
                             setReportCsInput(norm);
                           }}
                         >
-                          🔍 ดูข้อมูล {normalizeCsId(reportCsInput || 'CS-1')}
+                          ดูข้อมูล {normalizeCsId(reportCsInput || 'CS-1')}
                         </button>
                       </div>
 
@@ -2800,9 +2752,8 @@ export default function Portal() {
             <div className="hand-wash-modal-card" onClick={(e) => e.stopPropagation()}>
               <div className="hand-wash-modal-header">
                 <div className="hand-wash-modal-title">
-                  <span className="modal-icon">🧼</span>
                   <div>
-                    <h3 id="hand-wash-modal-title">คลิปวิดีโอสาธิตการล้างมือ 7 ขั้นตอนตามหลักการแพทย์</h3>
+                    <h3 id="hand-wash-modal-title">คลิปวิดีโอสาธิตการล้างมือ 7 ขั้นตอนตามหลักการแพทย์ (คณะแพทยศาสตร์ศิริราชพยาบาล)</h3>
                     <p>เทคนิคการล้างมือ 7 ขั้นตอนมาตรฐานสากล ป้องกันการติดเชื้อ CAUTI ในผู้ป่วยคาสายสวนปัสสาวะ</p>
                   </div>
                 </div>
@@ -2816,33 +2767,11 @@ export default function Portal() {
                 </button>
               </div>
 
-              {/* Video Source Tabs */}
-              <div className="hand-wash-video-tabs">
-                <button
-                  type="button"
-                  className={`video-tab-btn ${activeHandVideoTab === 'ddc' ? 'active' : ''}`}
-                  onClick={() => setActiveHandVideoTab('ddc')}
-                >
-                  🏛️ กองโรคติดต่อทั่วไป กรมควบคุมโรค กระทรวงสาธารณสุข
-                </button>
-                <button
-                  type="button"
-                  className={`video-tab-btn ${activeHandVideoTab === 'siriraj' ? 'active' : ''}`}
-                  onClick={() => setActiveHandVideoTab('siriraj')}
-                >
-                  🏥 คณะแพทยศาสตร์ศิริราชพยาบาล (Siriraj Channel)
-                </button>
-              </div>
-
               {/* 16:9 Responsive Embed */}
               <div className="hand-wash-iframe-container">
                 <iframe
-                  src={
-                    activeHandVideoTab === 'ddc'
-                      ? 'https://www.youtube-nocookie.com/embed/D5af_nAfEhY?autoplay=1&rel=0'
-                      : 'https://www.youtube-nocookie.com/embed/leHVk7bEhVg?autoplay=1&rel=0'
-                  }
-                  title="คลิปสาธิตการล้างมือ 7 ขั้นตอน"
+                  src="https://www.youtube-nocookie.com/embed/leHVk7bEhVg?autoplay=1&rel=0"
+                  title="คลิปสาธิตการล้างมือ 7 ขั้นตอน คณะแพทยศาสตร์ศิริราชพยาบาล"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   allowFullScreen
                 />
@@ -2850,7 +2779,7 @@ export default function Portal() {
 
               {/* 7 Mnemonic Steps Cards: หน้า หลัง กลาง ปั้น โป้ง ปลาย ข้อ */}
               <div className="hand-wash-7steps-summary">
-                <h4>📌 เคล็ดลับการจำ 7 ขั้นตอน: หน้า · หลัง · กลาง · ปั้น · โป้ง · ปลาย · ข้อ</h4>
+                <h4>เคล็ดลับการจำ 7 ขั้นตอน: หน้า · หลัง · กลาง · ปั้น · โป้ง · ปลาย · ข้อ</h4>
                 <div className="hand-steps-card-grid">
                   <div className="hand-mnemonic-card">
                     <span className="step-num">1</span>
